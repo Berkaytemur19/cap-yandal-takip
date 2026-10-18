@@ -128,10 +128,7 @@ Oturum hedefi (7 adım): 1) git/venv/requirements/Django, 2) üç rollü kullan�
 
 - [x] Adım 1–2: iskelet + `hesaplar.Kullanici` (rol alanı), `hesaplar/yetki.py` → `rol_gerekli` — commit `2a9d9d7`
 - [x] Adım 3: `takip/models.py`, `takip/services.py` (tek yazma kapısı + IslemKaydi), servis testleri (14 test geçti) — commit `b90869e`
-- [~] Adım 4: ekranlar YAZILDI ama **henüz test edilmedi** (WIP commit). Sıradaki iş:
-  1. `.\.venv\Scripts\python.exe manage.py test` çalıştır, `takip/tests/test_ekranlar.py` hatalarını düzelt.
-  2. `base.html` içindeki Bootstrap 5.3.3 SRI hash'lerini doğrula.
-  3. runserver ile elle bak, sonra adım 4 commit'i.
+- [x] Adım 4: ekranlar — 20/20 test geçti, Bootstrap SRI hash'leri doğrulandı, kullanıcı runserver ile elle baktı (19 Ekim). Not: temiz kurulumda önce `manage.py migrate` gerekir (README'ye ve seed_demo akışına eklenecek).
 - [ ] Adım 5: `takip/tests/test_yetki.py` — öğrenci `/ogrenciler/<başkası>/` → 403; başkan POST ile katalog/öğrenci ekleme → 403; öğrenci koordinatör sayfaları → 403.
 - [ ] Adım 6: `takip/management/commands/seed_demo.py` — servis katmanını kullanarak: protokol dersleri (seçmeliler `SECMELI_HAVUZ`: TS5/TS6/TS7), EEM→Bilgisayar ÇAP protokolü, sentetik "Bilgisayar Yandal" protokolü (≥30 AKTS, ≥6 ders), kural ayarları (seed değerleri), 3–4 öğrenci (≥1 ÇAP, ≥1 YDP, geriye dönük dersler + GANO), demo hesapları (koordinator / baskan / öğrenciler).
 - [ ] Adım 7: README.md (sıfırdan kurulum + demo hesapları).
