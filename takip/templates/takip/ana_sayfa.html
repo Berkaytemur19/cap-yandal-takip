@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block icerik %}
+<h1 class="h3 mb-1">Hoş geldiniz, {{ user.get_full_name|default:user.username }}</h1>
+<p class="text-muted">
+  {% if user.koordinator_mu %}Koordinatör paneli{% else %}Bölüm başkanı paneli — salt okunur görünüm{% endif %}
+</p>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="card"><div class="card-body">
+    <div class="text-muted small">Aktif ÇAP öğrencisi</div><div class="fs-3 fw-semibold">{{ sayilar.cap }}</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card"><div class="card-body">
+    <div class="text-muted small">Aktif YDP öğrencisi</div><div class="fs-3 fw-semibold">{{ sayilar.ydp }}</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card"><div class="card-body">
+    <div class="text-muted small">Onay bekleyen ders kaydı</div><div class="fs-3 fw-semibold">{{ sayilar.bekleyen }}</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card"><div class="card-body">
+    <div class="text-muted small">Katalogdaki aktif ders</div><div class="fs-3 fw-semibold">{{ sayilar.aktif_ders }}</div>
+  </div></div></div>
+</div>
+
+<div class="d-flex gap-2 mb-4 flex-wrap">
+  <a class="btn btn-primary" href="{% url 'ogrenci_listesi' %}">Öğrenci listesi</a>
+  {% if user.koordinator_mu %}
+    <a class="btn btn-outline-primary" href="{% url 'ogrenci_ekle' %}">Öğrenci ekle</a>
+    <a class="btn btn-outline-primary" href="{% url 'ders_katalogu' %}">Ders kataloğu</a>
+  {% endif %}
+  <a class="btn btn-outline-secondary" href="{% url 'islem_gecmisi' %}">İşlem geçmişi</a>
+</div>
+
+<h2 class="h5">Son işlemler</h2>
+{% include 'takip/_islem_tablosu.html' with kayitlar=son_islemler %}
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block baslik %}İşlem geçmişi{% endblock %}
+{% block icerik %}
+<h1 class="h3">İşlem geçmişi</h1>
+<p class="text-muted small">Kayıtlar yalnızca eklenir; değiştirilemez ve silinemez.</p>
+{% include 'takip/_islem_tablosu.html' with kayitlar=sayfa.object_list %}
+{% if sayfa.paginator.num_pages > 1 %}
+<nav><ul class="pagination pagination-sm">
+  {% if sayfa.has_previous %}<li class="page-item"><a class="page-link" href="?sayfa={{ sayfa.previous_page_number }}">Önceki</a></li>{% endif %}
+  <li class="page-item disabled"><span class="page-link">{{ sayfa.number }} / {{ sayfa.paginator.num_pages }}</span></li>
+  {% if sayfa.has_next %}<li class="page-item"><a class="page-link" href="?sayfa={{ sayfa.next_page_number }}">Sonraki</a></li>{% endif %}
+</ul></nav>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,60 @@
+{% load takip_etiketleri %}
+<div class="row g-3 mb-3">
+  <div class="col-6 col-lg-3"><div class="card"><div class="card-body py-2">
+    <div class="text-muted small">Toplam (listedeki)</div><div class="fs-4 fw-semibold">{{ ozet.toplam_akts }} AKTS</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card border-success"><div class="card-body py-2">
+    <div class="text-muted small">Tamamlanan · {{ ozet.tamamlanan_sayi }} ders</div><div class="fs-4 fw-semibold text-success">{{ ozet.tamamlanan_akts }} AKTS</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card"><div class="card-body py-2">
+    <div class="text-muted small">Kalan · {{ ozet.kalan_sayi }} ders</div><div class="fs-4 fw-semibold">{{ ozet.kalan_akts }} AKTS</div>
+  </div></div></div>
+  <div class="col-6 col-lg-3"><div class="card border-warning"><div class="card-body py-2">
+    <div class="text-muted small">Onay bekleyen kayıt</div><div class="fs-4 fw-semibold">{{ ozet.bekleyen_sayi }}</div>
+  </div></div></div>
+</div>
+<p class="text-muted small">Hesaplamalara yalnızca koordinatörün onayladığı kayıtlar girer.</p>
+
+<div class="table-responsive">
+<table class="table bg-white align-middle">
+  <thead><tr><th>Yy</th><th>Kod</th><th>Ders</th><th class="text-end">AKTS</th><th>Durum</th><th>Denemeler (dönem · not · durum · onay)</th></tr></thead>
+  <tbody>
+  {% for k in kalemler %}
+    {% with d=k.ozet_durum %}
+    <tr>
+      <td>{{ k.yariyil|default:"—" }}</td>
+      <td class="text-nowrap">{{ k.ders.kod }}</td>
+      <td>{{ k.ders.ad }}{% if not k.ders.aktif %} <span class="badge bg-secondary">katalogda pasif</span>{% endif %}</td>
+      <td class="text-end">{{ k.ders.akts }}</td>
+      <td><span class="badge bg-{{ d.0|rozet }}">{{ d.1 }}</span></td>
+      <td class="small">
+        {% for den in k.denemeler.all %}
+          <div>
+            {{ den.donem }} · {{ den.harf_notu|default:"—" }} · {{ den.get_durum_display }}
+            <span class="badge bg-{{ den.onay_durumu|rozet }}">{{ den.get_onay_durumu_display }}</span>
+            {% if den.geriye_donuk %}<span class="badge bg-light text-dark border">geriye dönük</span>{% endif %}
+            {% if den.red_gerekcesi %}<div class="text-danger">Ret: {{ den.red_gerekcesi }}</div>{% endif %}
+          </div>
+        {% empty %}<span class="text-muted">—</span>{% endfor %}
+      </td>
+    </tr>
+    {% endwith %}
+  {% empty %}
+    <tr><td colspan="6" class="text-muted">Ders listesi boş.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if cikarilanlar %}
+<h2 class="h6 mt-4">Listeden çıkarılan dersler</h2>
+<table class="table table-sm bg-white small">
+  <thead><tr><th>Kod</th><th>Ders</th><th>Gerekçe</th><th>Tarih</th><th>Çıkaran</th></tr></thead>
+  <tbody>
+  {% for k in cikarilanlar %}
+    <tr><td>{{ k.ders.kod }}</td><td>{{ k.ders.ad }}</td><td>{{ k.cikarma_gerekcesi }}</td>
+        <td>{{ k.cikarilma_tarihi|date:"d.m.Y" }}</td><td>{{ k.cikaran.username }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}

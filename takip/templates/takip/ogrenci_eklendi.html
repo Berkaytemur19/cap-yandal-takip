@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% block baslik %}Öğrenci eklendi{% endblock %}
+{% block icerik %}
+<div class="alert alert-success">
+  <h1 class="h5">{{ ogrenci.ad_soyad }} ({{ ogrenci.ogrenci_no }}) eklendi.</h1>
+  Ders listesi protokolden oluşturuldu: {{ ogrenci.ders_listesi.count }} ders.
+</div>
+<div class="card border-warning mb-3"><div class="card-body">
+  <h2 class="h6">Giriş bilgileri — yalnızca şimdi gösterilir</h2>
+  <p class="mb-1">Kullanıcı adı: <code>{{ ogrenci.ogrenci_no }}</code></p>
+  <p class="mb-0">Geçici şifre: <code class="fs-5">{{ sifre }}</code></p>
+</div></div>
+<a class="btn btn-primary" href="{% url 'ogrenci_detay' ogrenci.pk %}">Öğrenci kartına git</a>
+<a class="btn btn-outline-primary" href="{% url 'ogrenci_ekle' %}">Yeni öğrenci ekle</a>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% load takip_etiketleri %}
+<div class="card mb-4"><div class="card-body">
+  <div class="row small g-2">
+    <div class="col-md-4"><span class="text-muted">Öğrenci no:</span> {{ ogrenci.ogrenci_no }}</div>
+    <div class="col-md-4"><span class="text-muted">Okul e-postası:</span> {{ ogrenci.okul_eposta }}</div>
+    <div class="col-md-4"><span class="text-muted">Program:</span> {{ ogrenci.get_program_turu_display }}</div>
+    <div class="col-md-4"><span class="text-muted">Ana dal:</span> {{ ogrenci.ana_dal_bolumu }}</div>
+    <div class="col-md-4"><span class="text-muted">Kabul dönemi:</span> {{ ogrenci.kabul_donemi }}</div>
+    <div class="col-md-4"><span class="text-muted">Kayıt durumu:</span>
+      <span class="badge bg-{{ ogrenci.kayit_durumu|rozet }}">{{ ogrenci.get_kayit_durumu_display }}</span></div>
+    <div class="col-12"><span class="text-muted">Protokol:</span> {{ ogrenci.protokol }}</div>
+  </div>
+</div></div>

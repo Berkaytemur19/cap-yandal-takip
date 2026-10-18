@@ -94,6 +94,7 @@ AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = 0.5  # saat
 AXES_LOCKOUT_PARAMETERS = [['username', 'ip_address']]
 AXES_RESET_ON_SUCCESS = True
+AXES_LOCKOUT_TEMPLATE = 'hesaplar/kilitli.html'
 
 
 # --- Dil ve saat ---

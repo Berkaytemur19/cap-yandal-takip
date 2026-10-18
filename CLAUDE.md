@@ -122,6 +122,30 @@ Ders projesi, tek geliştirici. Geliştirici Python/Django'yu yeni öğreniyor: 
 | 3301852 | 5 | Staj 1 |
 | 3301853 | 5 | Staj 2 |
 
+## İlerleme Durumu (ilk sürüm oturumu — 19 Ekim 2026)
+
+Oturum hedefi (7 adım): 1) git/venv/requirements/Django, 2) üç rollü kullanıcı, 3) modeller, 4) ekranlar, 5) yetki testleri, 6) `seed_demo` komutu, 7) README.
+
+- [x] Adım 1–2: iskelet + `hesaplar.Kullanici` (rol alanı), `hesaplar/yetki.py` → `rol_gerekli` — commit `2a9d9d7`
+- [x] Adım 3: `takip/models.py`, `takip/services.py` (tek yazma kapısı + IslemKaydi), servis testleri (14 test geçti) — commit `b90869e`
+- [~] Adım 4: ekranlar YAZILDI ama **henüz test edilmedi** (WIP commit). Sıradaki iş:
+  1. `.\.venv\Scripts\python.exe manage.py test` çalıştır, `takip/tests/test_ekranlar.py` hatalarını düzelt.
+  2. `base.html` içindeki Bootstrap 5.3.3 SRI hash'lerini doğrula.
+  3. runserver ile elle bak, sonra adım 4 commit'i.
+- [ ] Adım 5: `takip/tests/test_yetki.py` — öğrenci `/ogrenciler/<başkası>/` → 403; başkan POST ile katalog/öğrenci ekleme → 403; öğrenci koordinatör sayfaları → 403.
+- [ ] Adım 6: `takip/management/commands/seed_demo.py` — servis katmanını kullanarak: protokol dersleri (seçmeliler `SECMELI_HAVUZ`: TS5/TS6/TS7), EEM→Bilgisayar ÇAP protokolü, sentetik "Bilgisayar Yandal" protokolü (≥30 AKTS, ≥6 ders), kural ayarları (seed değerleri), 3–4 öğrenci (≥1 ÇAP, ≥1 YDP, geriye dönük dersler + GANO), demo hesapları (koordinator / baskan / öğrenciler).
+- [ ] Adım 7: README.md (sıfırdan kurulum + demo hesapları).
+
+### Alınan tasarım kararları (kullanıcı onayladı)
+- django-simple-history yerine kendi append-only `IslemKaydi` modelimiz.
+- Teknik seçmeliler katalogda `SECMELI_HAVUZ` türünde yer tutucu ders; gerçek seçmeli eşleştirmesi sonra.
+- YDP protokolü sentetik.
+- "Listeden çıkarma" = `OgrenciDers.listede=False` (+gerekçe); "dersi bıraktı" = deneme durumu `CIKARILDI`.
+- python-magic (Windows'ta `python-magic-bin`) belge özelliğiyle eklenecek.
+- Öğrenci şimdilik yalnızca PLANLANDI/ALINDI girebilir; not girişi transkript yükleme özelliğiyle açılacak.
+- Koordinatörün girdiği deneme doğrudan onaylı; öğrencininki BEKLIYOR.
+- `takip` modelleri adminde salt okunur (değişiklik servis katmanından geçsin diye).
+
 ## Güvenlik
 
 - Yetki kontrolü **her view'da sunucu tarafında** yapılır.

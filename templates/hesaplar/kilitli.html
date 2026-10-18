@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block baslik %}Hesap geçici olarak kilitlendi{% endblock %}
+{% block icerik %}
+<div class="alert alert-warning">
+  <h1 class="h5">Çok fazla hatalı giriş denemesi</h1>
+  Güvenlik nedeniyle girişiniz 30 dakika süreyle engellendi. Daha sonra tekrar deneyin
+  veya koordinatöre başvurun.
+</div>
+{% endblock %}

@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block baslik %}Bilgilerim{% endblock %}
+{% block icerik %}
+<h1 class="h3">{{ ogrenci.ad_soyad }}</h1>
+{% include 'takip/_ogrenci_bilgileri.html' %}
+
+<h2 class="h5">Ders listem</h2>
+{% include 'takip/_ders_listesi.html' %}
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends 'base.html' %}
+{% block baslik %}{{ ogrenci.ad_soyad }}{% endblock %}
+{% block icerik %}
+<a href="{% url 'ogrenci_listesi' %}" class="small">&larr; Öğrenci listesi</a>
+<h1 class="h3 mt-2">{{ ogrenci.ad_soyad }} <small class="text-muted">{{ ogrenci.ogrenci_no }}</small></h1>
+{% if user.bolum_baskani_mi %}<div class="alert alert-info py-2 small">Salt okunur görünüm.</div>{% endif %}
+
+{% include 'takip/_ogrenci_bilgileri.html' %}
+
+<h2 class="h5">Ana dal GANO geçmişi</h2>
+<table class="table table-sm bg-white small mb-4">
+  <thead><tr><th>Dönem</th><th>GANO</th><th>Kaynak</th></tr></thead>
+  <tbody>
+  {% for g in gano_kayitlari %}
+    <tr><td>{{ g.donem }}</td><td>{{ g.gano }}</td><td>{{ g.kaynak }}</td></tr>
+  {% empty %}
+    <tr><td colspan="3" class="text-muted">GANO girilmemiş.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2 class="h5">Ders listesi</h2>
+{% include 'takip/_ders_listesi.html' %}
+{% endblock %}

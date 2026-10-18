@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block baslik %}Ders kataloğu{% endblock %}
+{% block icerik %}
+<h1 class="h3">Ders kataloğu</h1>
+<p class="text-muted small">Dersler silinmez; kullanılmayan ders pasife alınır. Öğrenciler yalnızca aktif dersleri seçebilir.</p>
+
+<div class="card mb-4"><div class="card-body">
+  <h2 class="h6">Yeni ders</h2>
+  <form method="post" class="row g-2 align-items-start" novalidate>
+    {% csrf_token %}
+    {% for alan in form %}
+      <div class="{% if alan.name == 'ad' %}col-md-5{% else %}col-md-2{% endif %}">
+        {{ alan }}
+        {% for hata in alan.errors %}<div class="text-danger small">{{ hata }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+    <div class="col-md-1"><button class="btn btn-primary w-100">Ekle</button></div>
+  </form>
+  <div class="form-text">Sıra: kod · ad · AKTS · tür</div>
+</div></div>
+
+<div class="table-responsive">
+<table class="table bg-white align-middle">
+  <thead><tr><th>Kod</th><th>Ad</th><th class="text-end">AKTS</th><th>Tür</th><th>Durum</th><th></th></tr></thead>
+  <tbody>
+  {% for d in dersler %}
+    <tr class="{% if not d.aktif %}text-muted{% endif %}">
+      <td>{{ d.kod }}</td><td>{{ d.ad }}</td><td class="text-end">{{ d.akts }}</td><td>{{ d.get_tur_display }}</td>
+      <td>{% if d.aktif %}<span class="badge bg-success">Aktif</span>{% else %}<span class="badge bg-secondary">Pasif</span>{% endif %}</td>
+      <td class="text-end text-nowrap">
+        <a class="btn btn-sm btn-outline-primary" href="{% url 'ders_duzenle' d.pk %}">Düzenle</a>
+        <form method="post" action="{% url 'ders_aktiflik' d.pk %}" class="d-inline">
+          {% csrf_token %}
+          {% if d.aktif %}
+            <input type="hidden" name="aktif" value="0"><button class="btn btn-sm btn-outline-secondary">Pasife al</button>
+          {% else %}
+            <input type="hidden" name="aktif" value="1"><button class="btn btn-sm btn-outline-success">Aktifleştir</button>
+          {% endif %}
+        </form>
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

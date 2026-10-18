@@ -301,6 +301,19 @@ class OgrenciDers(SilinmezModel):
         denemeler = sorted(self.onayli_denemeler, key=lambda d: (d.donem.sira, d.olusturulma))
         return denemeler[-1] if denemeler else None
 
+    @property
+    def ozet_durum(self):
+        """Ekranda gösterilecek tek satırlık durum: (kod, metin)."""
+        if self.tamamlandi:
+            muaf = any(d.durum == DenemeDurumu.MUAF for d in self.onayli_denemeler)
+            return ('MUAF', 'Muaf') if muaf else ('GECTI', 'Geçti')
+        if self.bekleyen_denemeler:
+            return ('BEKLIYOR', 'Onay bekliyor')
+        son = self.son_onayli_deneme
+        if son:
+            return (son.durum, son.get_durum_display())
+        return ('YOK', 'Alınmadı')
+
 
 class DenemeKilitli(Exception):
     """Onaylanmış denemeyi düzeltme servisi dışında değiştirme girişimi."""

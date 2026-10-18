@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block baslik %}Ders düzenle{% endblock %}
+{% block icerik %}
+<a href="{% url 'ders_katalogu' %}" class="small">&larr; Ders kataloğu</a>
+<h1 class="h3 mt-2">{{ ders.kod }} düzenle</h1>
+<div class="card" style="max-width: 40rem"><div class="card-body">
+<form method="post" novalidate>
+  {% csrf_token %}
+  {% for alan in form %}
+    <div class="mb-3">
+      <label class="form-label" for="{{ alan.id_for_label }}">{{ alan.label }}</label>
+      {{ alan }}
+      {% if alan.help_text %}<div class="form-text">{{ alan.help_text }}</div>{% endif %}
+      {% for hata in alan.errors %}<div class="text-danger small">{{ hata }}</div>{% endfor %}
+    </div>
+  {% endfor %}
+  <button class="btn btn-primary">Kaydet</button>
+</form>
+</div></div>
+{% endblock %}

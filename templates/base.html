@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block baslik %}ÇAP / Yandal Takip{% endblock %}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-expand-md navbar-dark bg-primary mb-4">
+  <div class="container">
+    <a class="navbar-brand" href="{% url 'ana_sayfa' %}">ÇAP / Yandal Takip</a>
+    {% if user.is_authenticated %}
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#menu">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="menu">
+      <ul class="navbar-nav me-auto">
+        {% if user.koordinator_mu %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'ogrenci_listesi' %}">Öğrenciler</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'ogrenci_ekle' %}">Öğrenci ekle</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'ders_katalogu' %}">Ders kataloğu</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'islem_gecmisi' %}">İşlem geçmişi</a></li>
+        {% elif user.bolum_baskani_mi %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'ogrenci_listesi' %}">Öğrenciler</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'islem_gecmisi' %}">İşlem geçmişi</a></li>
+        {% elif user.ogrenci_mi %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'benim' %}">Bilgilerim ve derslerim</a></li>
+        {% endif %}
+      </ul>
+      <span class="navbar-text me-3 small">{{ user.get_full_name|default:user.username }} · {{ user.get_rol_display }}</span>
+      <form method="post" action="{% url 'cikis' %}">
+        {% csrf_token %}
+        <button class="btn btn-sm btn-outline-light">Çıkış</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</nav>
+
+<main class="container pb-5">
+  {% for mesaj in messages %}
+    <div class="alert alert-{% if mesaj.tags == 'error' %}danger{% else %}{{ mesaj.tags }}{% endif %} alert-dismissible fade show">
+      {{ mesaj }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  {% endfor %}
+  {% block icerik %}{% endblock %}
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+</body>
+</html>

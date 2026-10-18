@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block baslik %}Erişim yok{% endblock %}
+{% block icerik %}
+<div class="alert alert-danger">
+  <h1 class="h5">Bu sayfayı görüntüleme yetkiniz yok.</h1>
+  <a href="{% url 'ana_sayfa' %}" class="alert-link">Ana sayfaya dön</a>
+</div>
+{% endblock %}

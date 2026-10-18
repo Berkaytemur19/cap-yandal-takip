@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block baslik %}Giriş · ÇAP / Yandal Takip{% endblock %}
+{% block icerik %}
+<div class="row justify-content-center">
+  <div class="col-md-5 col-lg-4">
+    <div class="card shadow-sm">
+      <div class="card-body p-4">
+        <h1 class="h4 mb-1">Giriş</h1>
+        <p class="text-muted small mb-4">Selçuk Üniv. Bilgisayar Müh. — ÇAP ve Yandal öğrenci takibi</p>
+        {% if form.non_field_errors %}
+          <div class="alert alert-danger small">Kullanıcı adı veya şifre hatalı.</div>
+        {% endif %}
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label" for="id_username">Kullanıcı adı / öğrenci no</label>
+            <input class="form-control" type="text" name="username" id="id_username" autofocus required
+                   value="{{ form.username.value|default:'' }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label" for="id_password">Şifre</label>
+            <input class="form-control" type="password" name="password" id="id_password" required>
+          </div>
+          <input type="hidden" name="next" value="{{ next }}">
+          <button class="btn btn-primary w-100">Giriş yap</button>
+        </form>
+        <p class="text-muted small mt-3 mb-0">Hesabınızı koordinatör açar. Kendi kendine kayıt yoktur.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
