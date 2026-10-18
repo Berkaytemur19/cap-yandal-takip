@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.pyc
+db.sqlite3
+korumali_dosyalar/
+.env
+.vscode/
+.idea/
