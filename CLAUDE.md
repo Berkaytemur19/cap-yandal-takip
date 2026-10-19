@@ -133,7 +133,7 @@ Oturum hedefi (7 adım): 1) git/venv/requirements/Django, 2) üç rollü kullan�
 - [x] Adım 6: `seed_demo` komutu + `takip/tests/test_seed_demo.py` (9 test; toplam 40 geçti). Servis katmanından: 23 ders (TS5/TS6/TS7 havuz), ÇAP protokolü (135 AKTS), sentetik Makine→Bilgisayar yandal (7 ders, 30 AKTS), 13 kural ayarı, 4 öğrenci (2 ÇAP, 2 YDP; geriye dönük dersler, GANO, listeden çıkarma, 4 onay bekleyen öğrenci girişi). Demo hesapları: `koordinator`, `baskan`, öğrenci no'ları; şifre `Demo.2026`. Tekrar çalıştırılabilir (var olanı atlar, var olan kural ayarına dokunmaz); DEBUG kapalıyken çalışmaz. Gerçek db'ye yüklendi.
 - [x] Adım 7: README.md (kurulum, demo hesapları, testler, roller, yapı, durum, sorun giderme). Kurulum adımları temiz bir klonda baştan sona denendi: migrate + seed_demo + 40 test OK.
 
-**İlk sürüm oturumunun 7 adımı tamamlandı (19 Ekim 2026).** Sıradaki özellikler README'deki "Henüz yapılmayanlar" listesinde. Uzak repo (GitHub) henüz bağlı değil.
+**İlk sürüm oturumunun 7 adımı tamamlandı (19 Ekim 2026).** Sıradaki özellikler README'deki "Henüz yapılmayanlar" listesinde. GitHub (gizli repo): https://github.com/Berkaytemur19/cap-yandal-takip
 
 ### Alınan tasarım kararları (kullanıcı onayladı)
 - django-simple-history yerine kendi append-only `IslemKaydi` modelimiz.

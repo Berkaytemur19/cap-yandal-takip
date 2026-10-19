@@ -14,7 +14,7 @@ Gerekenler: **Python 3.10 veya üstü** (3.14 ile denendi) ve Git.
 
 ```powershell
 # 1. Projeyi indir ve klasörüne gir
-git clone <repo-adresi> cap-yandal-takip
+git clone https://github.com/Berkaytemur19/cap-yandal-takip.git
 cd cap-yandal-takip
 
 # 2. Sanal ortamı kur ve paketleri yükle
