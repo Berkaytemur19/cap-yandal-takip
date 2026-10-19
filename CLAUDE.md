@@ -131,7 +131,9 @@ Oturum hedefi (7 adım): 1) git/venv/requirements/Django, 2) üç rollü kullan�
 - [x] Adım 4: ekranlar — 20/20 test geçti, Bootstrap SRI hash'leri doğrulandı, kullanıcı runserver ile elle baktı (19 Ekim). Not: temiz kurulumda önce `manage.py migrate` gerekir (README'ye ve seed_demo akışına eklenecek).
 - [x] Adım 5: `takip/tests/test_yetki.py` (11 test; toplam 31 geçti) — anonim → giriş yönlendirmesi; öğrenci başkasının detayı ve yönetim sayfaları → 403; başkan/öğrenci POST'ları → 403 ve veri + IslemKaydi değişmiyor; rolsüz hesap → 403; `ders_aktiflik` GET → 405. Testlerin gerçekten yakaladığı, korumayı geçici bozarak doğrulandı.
 - [x] Adım 6: `seed_demo` komutu + `takip/tests/test_seed_demo.py` (9 test; toplam 40 geçti). Servis katmanından: 23 ders (TS5/TS6/TS7 havuz), ÇAP protokolü (135 AKTS), sentetik Makine→Bilgisayar yandal (7 ders, 30 AKTS), 13 kural ayarı, 4 öğrenci (2 ÇAP, 2 YDP; geriye dönük dersler, GANO, listeden çıkarma, 4 onay bekleyen öğrenci girişi). Demo hesapları: `koordinator`, `baskan`, öğrenci no'ları; şifre `Demo.2026`. Tekrar çalıştırılabilir (var olanı atlar, var olan kural ayarına dokunmaz); DEBUG kapalıyken çalışmaz. Gerçek db'ye yüklendi.
-- [ ] Adım 7: README.md (sıfırdan kurulum + demo hesapları).
+- [x] Adım 7: README.md (kurulum, demo hesapları, testler, roller, yapı, durum, sorun giderme). Kurulum adımları temiz bir klonda baştan sona denendi: migrate + seed_demo + 40 test OK.
+
+**İlk sürüm oturumunun 7 adımı tamamlandı (19 Ekim 2026).** Sıradaki özellikler README'deki "Henüz yapılmayanlar" listesinde. Uzak repo (GitHub) henüz bağlı değil.
 
 ### Alınan tasarım kararları (kullanıcı onayladı)
 - django-simple-history yerine kendi append-only `IslemKaydi` modelimiz.
