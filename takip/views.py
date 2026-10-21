@@ -176,3 +176,44 @@ def islem_gecmisi(request):
     kayitlar = IslemKaydi.objects.select_related('kullanici')
     sayfa = Paginator(kayitlar, 50).get_page(request.GET.get('sayfa'))
     return render(request, 'takip/islem_gecmisi.html', {'sayfa': sayfa})
+
+
+# ---------------------------------------------------------------------------
+# Onay bekleyen ders kayıtları (koordinatör)
+# ---------------------------------------------------------------------------
+
+@rol_gerekli(KOORD)
+def onay_bekleyenler(request):
+    """Öğrencilerin girdiği, onay bekleyen ders denemeleri. En eski kayıt en üstte."""
+    denemeler = (
+        DersDenemesi.objects.filter(onay_durumu=OnayDurumu.BEKLIYOR)
+        .select_related('liste_kalemi__ogrenci', 'liste_kalemi__ders', 'donem', 'giren')
+        .order_by('olusturulma')
+    )
+    return render(request, 'takip/onay_bekleyenler.html', {'denemeler': denemeler})
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def deneme_onayla(request, pk):
+    deneme = get_object_or_404(DersDenemesi, pk=pk)
+    try:
+        services.deneme_onayla(request.user, deneme)
+    except services.IslemHatasi as hata:
+        messages.error(request, str(hata))
+    else:
+        messages.success(request, f'{deneme.liste_kalemi} ({deneme.donem}) onaylandı.')
+    return redirect('onay_bekleyenler')
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def deneme_reddet(request, pk):
+    deneme = get_object_or_404(DersDenemesi, pk=pk)
+    try:
+        services.deneme_reddet(request.user, deneme, request.POST.get('gerekce', '').strip())
+    except services.IslemHatasi as hata:
+        messages.error(request, str(hata))
+    else:
+        messages.success(request, f'{deneme.liste_kalemi} ({deneme.donem}) reddedildi.')
+    return redirect('onay_bekleyenler')

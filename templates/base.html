@@ -19,6 +19,7 @@
       <ul class="navbar-nav me-auto">
         {% if user.koordinator_mu %}
           <li class="nav-item"><a class="nav-link" href="{% url 'ogrenci_listesi' %}">Öğrenciler</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'onay_bekleyenler' %}">Onay bekleyenler</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'ogrenci_ekle' %}">Öğrenci ekle</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'ders_katalogu' %}">Ders kataloğu</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'islem_gecmisi' %}">İşlem geçmişi</a></li>

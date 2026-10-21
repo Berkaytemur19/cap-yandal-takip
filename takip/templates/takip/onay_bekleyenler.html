@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block baslik %}Onay bekleyenler{% endblock %}
+{% block icerik %}
+<h1 class="h3 mb-1">Onay bekleyen ders kayıtları</h1>
+<p class="text-muted">Öğrencilerin girdiği kayıtlar onaylanana kadar AKTS hesabına girmez. Ret için gerekçe zorunludur.</p>
+
+<div class="table-responsive">
+<table class="table bg-white align-middle">
+  <thead><tr><th>Öğrenci</th><th>Ders</th><th>Dönem</th><th>Durum</th><th>Giriş tarihi</th><th>İşlem</th></tr></thead>
+  <tbody>
+  {% for d in denemeler %}
+    {% with o=d.liste_kalemi.ogrenci %}
+    <tr>
+      <td><a href="{% url 'ogrenci_detay' o.pk %}">{{ o.ogrenci_no }}</a><br><span class="small">{{ o.ad_soyad }} · {{ o.program_turu }}</span></td>
+      <td>{{ d.liste_kalemi.ders.kod }}<br><span class="small">{{ d.liste_kalemi.ders.ad }} ({{ d.liste_kalemi.ders.akts }} AKTS)</span></td>
+      <td>{{ d.donem }}</td>
+      <td>{{ d.get_durum_display }}{% if d.harf_notu %} · {{ d.harf_notu }}{% endif %}</td>
+      <td class="small">{{ d.olusturulma|date:"d.m.Y H:i" }}</td>
+      <td style="min-width: 18rem">
+        <form method="post" action="{% url 'deneme_onayla' d.pk %}" class="mb-2">
+          {% csrf_token %}
+          <button class="btn btn-sm btn-success">Onayla</button>
+        </form>
+        <form method="post" action="{% url 'deneme_reddet' d.pk %}" class="input-group input-group-sm">
+          {% csrf_token %}
+          <input class="form-control" name="gerekce" placeholder="Ret gerekçesi" required>
+          <button class="btn btn-outline-danger">Reddet</button>
+        </form>
+      </td>
+    </tr>
+    {% endwith %}
+  {% empty %}
+    <tr><td colspan="6" class="text-muted">Onay bekleyen kayıt yok.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

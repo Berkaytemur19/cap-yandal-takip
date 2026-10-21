@@ -16,6 +16,7 @@ class YetkiTest(TestVerisi, TestCase):
             reverse('ogrenci_ekle'),
             reverse('ders_katalogu'),
             reverse('ders_duzenle', args=[self.ders1.pk]),
+            reverse('onay_bekleyenler'),
         ]
 
     def _yonetim_sayfalari(self):

@@ -14,6 +14,7 @@
   </div></div></div>
   <div class="col-6 col-lg-3"><div class="card"><div class="card-body">
     <div class="text-muted small">Onay bekleyen ders kaydı</div><div class="fs-3 fw-semibold">{{ sayilar.bekleyen }}</div>
+    {% if user.koordinator_mu %}<a class="stretched-link small" href="{% url 'onay_bekleyenler' %}">İncele</a>{% endif %}
   </div></div></div>
   <div class="col-6 col-lg-3"><div class="card"><div class="card-body">
     <div class="text-muted small">Katalogdaki aktif ders</div><div class="fs-3 fw-semibold">{{ sayilar.aktif_ders }}</div>
