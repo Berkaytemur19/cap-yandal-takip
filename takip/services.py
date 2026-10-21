@@ -6,20 +6,26 @@
 - İş kuralı ihlalinde IslemHatasi fırlatılır; view bunu kullanıcıya mesaj olarak gösterir.
 """
 
+import hashlib
 import secrets
+import uuid
 from decimal import Decimal
+from pathlib import Path
 
+import magic
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
+from django.core.files.storage import FileSystemStorage
 from django.db import transaction
 from django.utils import timezone
 
 from hesaplar.models import Rol
 
 from .models import (
-    AkademikDonem, AnaDalGanoKaydi, DenemeDurumu, Ders, DersDenemesi, DersTalebi, DersTuru,
-    DonemTuru, IslemKaydi, KayitDurumu, KuralAyari, Ogrenci, OgrenciDers, OnayDurumu, Protokol,
-    ProtokolDersi, TalepDurumu,
+    DONEMLI_BELGE_TURLERI, AkademikDonem, AnaDalGanoKaydi, Belge, BelgeDurumu, BelgeTuru,
+    DenemeDurumu, Ders, DersDenemesi, DersTalebi, DersTuru, DonemTuru, IslemKaydi, KayitDurumu,
+    KuralAyari, Ogrenci, OgrenciDers, OnayDurumu, Protokol, ProtokolDersi, TalepDurumu,
 )
 
 
@@ -501,6 +507,119 @@ def talep_reddet(kullanici, talep, gerekce):
     islem_kaydet(kullanici, 'talep_reddet', talep, eski=eski,
                  yeni=_deger(talep, ['durum']), aciklama=talep.yanit)
     return talep
+
+
+# ---------------------------------------------------------------------------
+# Belgeler
+# ---------------------------------------------------------------------------
+
+def belge_deposu():
+    """Belgelerin saklandığı yer: web kökü dışında, MEDIA_URL'siz (doğrudan adresle açılamaz)."""
+    return FileSystemStorage(location=settings.KORUMALI_DOSYA_KOKU)
+
+
+def dosya_kontrol(dosya):
+    """Boyut ve içerik kontrolü. Tür, uzantıya değil dosyanın ilk baytlarına bakılarak belirlenir.
+
+    Dönüş: dosyanın MIME türü (ör. 'application/pdf').
+    """
+    azami = settings.BELGE_AZAMI_BOYUT
+    if dosya.size == 0:
+        raise IslemHatasi('Dosya boş.')
+    if dosya.size > azami:
+        raise IslemHatasi(f'Dosya en fazla {azami // (1024 * 1024)} MB olabilir.')
+    dosya.seek(0)
+    mime = magic.from_buffer(dosya.read(2048), mime=True)
+    dosya.seek(0)
+    if mime not in settings.BELGE_IZINLI_TURLER:
+        raise IslemHatasi('Yalnızca PDF, JPG veya PNG dosyası yüklenebilir.')
+    uzanti = Path(dosya.name).suffix.lower()
+    beklenen = {settings.BELGE_IZINLI_TURLER[mime]} | ({'.jpeg'} if mime == 'image/jpeg' else set())
+    if uzanti not in beklenen:
+        raise IslemHatasi('Dosya uzantısı, dosyanın içeriğiyle uyuşmuyor.')
+    return mime
+
+
+def belge_donemleri(ogrenci, tarih=None):
+    """Belge yüklerken seçilebilecek dönemler: kabul döneminden bir sonraki döneme kadar."""
+    son = secilebilir_donemler(tarih)[-1]
+    son_sira = (son[0], [DonemTuru.GUZ, DonemTuru.BAHAR, DonemTuru.YAZ].index(son[1]))
+    idler = [d.pk for d in AkademikDonem.objects.all() if ogrenci.kabul_donemi.sira <= d.sira <= son_sira]
+    return AkademikDonem.objects.filter(pk__in=idler)
+
+
+BELGE_ALANLARI = ['tur', 'donem', 'surum', 'orijinal_ad', 'mime_turu', 'boyut', 'sha256', 'durum']
+
+
+@transaction.atomic
+def belge_yukle(kullanici, tur, dosya, donem=None, aciklama=''):
+    """Öğrenci belge yükler. Aynı tür ve dönemde önceki belge varsa yeni sürüm olur; eskisi kalır."""
+    ogrenci = _ogrenci_kaydi(kullanici)
+    if tur not in BelgeTuru.values:
+        raise IslemHatasi('Geçersiz belge türü.')
+    if tur in DONEMLI_BELGE_TURLERI and donem is None:
+        raise IslemHatasi(f'{BelgeTuru(tur).label} için dönem seçilmesi zorunludur.')
+    mime = dosya_kontrol(dosya)
+
+    onceki = ogrenci.belgeler.filter(tur=tur, donem=donem).order_by('-surum').first()
+    if onceki and onceki.durum == BelgeDurumu.BEKLIYOR:
+        raise IslemHatasi('Bu belgenin önceki sürümü hâlâ onay bekliyor. '
+                          'Koordinatör yanıtladıktan sonra yeni sürüm yükleyebilirsiniz.')
+
+    ozet = hashlib.sha256()
+    for parca in dosya.chunks():
+        ozet.update(parca)
+    dosya.seek(0)
+
+    depo = belge_deposu()
+    ad = f'belgeler/{ogrenci.ogrenci_no}/{uuid.uuid4().hex}{settings.BELGE_IZINLI_TURLER[mime]}'
+    yol = depo.save(ad, dosya)
+    try:
+        belge = Belge.objects.create(
+            ogrenci=ogrenci, tur=tur, donem=donem, surum=(onceki.surum + 1) if onceki else 1,
+            aciklama=(aciklama or '').strip(), dosya_yolu=yol, orijinal_ad=Path(dosya.name).name[:200],
+            mime_turu=mime, boyut=dosya.size, sha256=ozet.hexdigest(), yukleyen=kullanici,
+        )
+        islem_kaydet(kullanici, 'belge_yukle', belge, yeni=_deger(belge, BELGE_ALANLARI))
+    except Exception:
+        depo.delete(yol)  # kayıt oluşmadıysa diskte sahipsiz dosya kalmasın
+        raise
+    return belge
+
+
+def _belge_bekliyor_olmali(belge):
+    if belge.durum != BelgeDurumu.BEKLIYOR:
+        raise IslemHatasi('Yalnızca onay bekleyen belge incelenebilir.')
+
+
+@transaction.atomic
+def belge_onayla(kullanici, belge):
+    _koordinator_olmali(kullanici)
+    _belge_bekliyor_olmali(belge)
+    eski = _deger(belge, ['durum'])
+    belge.durum = BelgeDurumu.ONAYLANDI
+    belge.inceleyen = kullanici
+    belge.inceleme_tarihi = timezone.now()
+    belge.save()
+    islem_kaydet(kullanici, 'belge_onayla', belge, eski=eski, yeni=_deger(belge, ['durum']))
+    return belge
+
+
+@transaction.atomic
+def belge_reddet(kullanici, belge, gerekce):
+    """Ret gerekçesi öğrenciye gösterilir (ör. 'imza eksik, yeniden yükleyin')."""
+    _koordinator_olmali(kullanici)
+    _gerekce_olmali(gerekce)
+    _belge_bekliyor_olmali(belge)
+    eski = _deger(belge, ['durum'])
+    belge.durum = BelgeDurumu.REDDEDILDI
+    belge.red_gerekcesi = gerekce.strip()
+    belge.inceleyen = kullanici
+    belge.inceleme_tarihi = timezone.now()
+    belge.save()
+    islem_kaydet(kullanici, 'belge_reddet', belge, eski=eski,
+                 yeni=_deger(belge, ['durum']), aciklama=belge.red_gerekcesi)
+    return belge
 
 
 # ---------------------------------------------------------------------------

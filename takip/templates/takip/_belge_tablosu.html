@@ -1,0 +1,22 @@
+{% load takip_etiketleri %}
+<div class="table-responsive">
+<table class="table table-sm bg-white small align-middle">
+  <thead><tr><th>Belge</th><th>Dönem</th><th>Sürüm</th><th>Dosya</th><th>Yükleme</th><th>Durum</th></tr></thead>
+  <tbody>
+  {% for b in belgeler %}
+    <tr>
+      <td>{{ b.get_tur_display }}{% if b.aciklama %}<div class="text-muted">{{ b.aciklama }}</div>{% endif %}</td>
+      <td>{{ b.donem|default:"—" }}</td>
+      <td>{{ b.surum }}</td>
+      <td><a href="{% url 'belge_dosyasi' b.pk %}" target="_blank" rel="noopener">{{ b.orijinal_ad }}</a>
+        <span class="text-muted">({{ b.boyut|filesizeformat }})</span></td>
+      <td class="text-nowrap">{{ b.olusturulma|date:"d.m.Y H:i" }}</td>
+      <td><span class="badge bg-{{ b.durum|rozet }}">{{ b.get_durum_display }}</span>
+        {% if b.red_gerekcesi %}<div class="text-danger">Ret: {{ b.red_gerekcesi }}</div>{% endif %}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="6" class="text-muted">Yüklenmiş belge yok.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>

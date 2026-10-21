@@ -402,6 +402,66 @@ class DersTalebi(SilinmezModel):
 
 
 # ---------------------------------------------------------------------------
+# Belgeler
+# ---------------------------------------------------------------------------
+
+class BelgeTuru(models.TextChoices):
+    KAYIT_FORMU = 'KAYIT_FORMU', 'İmzalı kayıt formu'
+    DERS_SECIM_FORMU = 'DERS_SECIM_FORMU', 'İmzalı ders seçim formu'
+    TRANSKRIPT = 'TRANSKRIPT', 'Dönem sonu transkripti'
+    DIGER = 'DIGER', 'Diğer'
+
+
+# Bu türler bir döneme aittir; yüklerken dönem seçilmesi zorunludur.
+DONEMLI_BELGE_TURLERI = {BelgeTuru.DERS_SECIM_FORMU, BelgeTuru.TRANSKRIPT}
+
+
+class BelgeDurumu(models.TextChoices):
+    BEKLIYOR = 'BEKLIYOR', 'Onay bekliyor'
+    ONAYLANDI = 'ONAYLANDI', 'Onaylandı'
+    REDDEDILDI = 'REDDEDILDI', 'Reddedildi'
+
+
+class Belge(SilinmezModel):
+    """Öğrencinin yüklediği belge. Silinmez; aynı belgenin yeni sürümü yeni kayıt olarak eklenir.
+
+    Dosya web kökü dışında (KORUMALI_DOSYA_KOKU) rastgele bir adla saklanır;
+    yalnızca yetki kontrollü view ile sunulur.
+    """
+
+    ogrenci = models.ForeignKey(Ogrenci, on_delete=models.PROTECT, related_name='belgeler')
+    tur = models.CharField('belge türü', max_length=20, choices=BelgeTuru.choices)
+    donem = models.ForeignKey(
+        AkademikDonem, on_delete=models.PROTECT, null=True, blank=True, verbose_name='dönem',
+    )
+    surum = models.PositiveSmallIntegerField('sürüm', default=1)
+    aciklama = models.CharField('açıklama', max_length=300, blank=True)
+
+    dosya_yolu = models.CharField('dosya yolu', max_length=300, unique=True, editable=False)
+    orijinal_ad = models.CharField('dosya adı', max_length=200)
+    mime_turu = models.CharField('dosya türü', max_length=50)
+    boyut = models.PositiveIntegerField('boyut (bayt)')
+    sha256 = models.CharField(max_length=64)
+
+    durum = models.CharField(max_length=10, choices=BelgeDurumu.choices, default=BelgeDurumu.BEKLIYOR)
+    yukleyen = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    inceleyen = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+', null=True, blank=True,
+    )
+    inceleme_tarihi = models.DateTimeField('inceleme tarihi', null=True, blank=True)
+    red_gerekcesi = models.TextField('ret gerekçesi', blank=True)
+
+    class Meta:
+        verbose_name = 'Belge'
+        verbose_name_plural = 'Belgeler'
+        ordering = ['ogrenci', 'tur', '-olusturulma']
+
+    def __str__(self):
+        donem = f' {self.donem}' if self.donem_id else ''
+        return f'{self.ogrenci.ogrenci_no} — {self.get_tur_display()}{donem} (s{self.surum})'
+
+
+# ---------------------------------------------------------------------------
 # Kural ayarları (sürümlü)
 # ---------------------------------------------------------------------------
 

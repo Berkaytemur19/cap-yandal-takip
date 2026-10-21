@@ -107,8 +107,16 @@ USE_TZ = True
 # --- Statik dosyalar ---
 STATIC_URL = 'static/'
 
-# Yüklenen belgeler web kökü dışında tutulacak (sonraki oturum).
-# MEDIA_URL bilerek tanımlanmıyor: dosyalar yalnızca yetki kontrollü view ile sunulacak.
+# Yüklenen belgeler web kökü dışında tutulur.
+# MEDIA_URL bilerek tanımlanmıyor: dosyalar yalnızca yetki kontrollü view (belge_dosyasi) ile sunulur.
 KORUMALI_DOSYA_KOKU = BASE_DIR / 'korumali_dosyalar'
+
+# Belge yükleme sınırları. Tür, dosya uzantısına değil içeriğine bakılarak (python-magic) belirlenir.
+BELGE_AZAMI_BOYUT = 5 * 1024 * 1024  # 5 MB
+BELGE_IZINLI_TURLER = {
+    'application/pdf': '.pdf',
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

@@ -7,7 +7,8 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
-from django.http import Http404
+from django.core.exceptions import PermissionDenied
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -15,9 +16,10 @@ from hesaplar.models import Rol
 from hesaplar.yetki import rol_gerekli
 
 from . import services
-from .forms import DersForm, DersSecForm, OgrenciEkleForm, TalepForm
+from .forms import BelgeYukleForm, DersForm, DersSecForm, OgrenciEkleForm, TalepForm
 from .models import (
-    Ders, DersDenemesi, DersTalebi, IslemKaydi, Ogrenci, OnayDurumu, ProgramTuru, TalepDurumu,
+    Belge, BelgeDurumu, Ders, DersDenemesi, DersTalebi, IslemKaydi, Ogrenci, OnayDurumu, ProgramTuru,
+    TalepDurumu,
 )
 
 KOORD = Rol.KOORDINATOR
@@ -45,6 +47,7 @@ def ana_sayfa(request):
     sayilar['bekleyen'] = DersDenemesi.objects.filter(onay_durumu=OnayDurumu.BEKLIYOR).count()
     sayilar['aktif_ders'] = Ders.objects.filter(aktif=True).count()
     sayilar['talep'] = DersTalebi.objects.filter(durum=TalepDurumu.BEKLIYOR).count()
+    sayilar['belge'] = Belge.objects.filter(durum=BelgeDurumu.BEKLIYOR).count()
     son_islemler = IslemKaydi.objects.select_related('kullanici')[:8]
     return render(request, 'takip/ana_sayfa.html', {'sayilar': sayilar, 'son_islemler': son_islemler})
 
@@ -87,7 +90,9 @@ def _ders_listesi_baglami(ogrenci):
 @rol_gerekli(KOORD, BASKAN)
 def ogrenci_detay(request, pk):
     ogrenci = get_object_or_404(Ogrenci.objects.select_related('kabul_donemi', 'protokol'), pk=pk)
-    return render(request, 'takip/ogrenci_detay.html', _ders_listesi_baglami(ogrenci))
+    baglam = _ders_listesi_baglami(ogrenci)
+    baglam['belgeler'] = ogrenci.belgeler.select_related('donem')
+    return render(request, 'takip/ogrenci_detay.html', baglam)
 
 
 @rol_gerekli(KOORD)
@@ -307,3 +312,83 @@ def talep_reddet(request, pk):
     else:
         messages.success(request, f'{talep.ogrenci.ad_soyad} adlı öğrencinin talebi reddedildi.')
     return redirect('talepler')
+
+
+# ---------------------------------------------------------------------------
+# Belgeler
+# ---------------------------------------------------------------------------
+
+@rol_gerekli(OGRENCI)
+def belgelerim(request):
+    """Öğrenci belge yükler ve kendi belgelerini (tüm sürümleriyle) görür."""
+    try:
+        ogrenci = request.user.ogrenci
+    except Ogrenci.DoesNotExist:
+        raise Http404('Bu hesaba bağlı öğrenci kaydı yok.')
+
+    form = BelgeYukleForm(request.POST or None, request.FILES or None,
+                          donemler=services.belge_donemleri(ogrenci))
+    if request.method == 'POST' and form.is_valid():
+        v = form.cleaned_data
+        try:
+            belge = services.belge_yukle(request.user, v['tur'], v['dosya'], v['donem'], v['aciklama'])
+        except services.IslemHatasi as hata:
+            form.add_error(None, str(hata))
+        else:
+            messages.success(request, f'{belge.get_tur_display()} yüklendi; koordinatör onayı bekleniyor.')
+            return redirect('belgelerim')
+
+    return render(request, 'takip/belgelerim.html', {
+        'form': form, 'belgeler': ogrenci.belgeler.select_related('donem'),
+    })
+
+
+@rol_gerekli(KOORD)
+def belgeler(request):
+    """Onay bekleyen belgeler (en eski önce) ve son incelenenler."""
+    tum = Belge.objects.select_related('ogrenci', 'donem', 'inceleyen')
+    return render(request, 'takip/belgeler.html', {
+        'bekleyenler': tum.filter(durum=BelgeDurumu.BEKLIYOR).order_by('olusturulma'),
+        'incelenenler': tum.exclude(durum=BelgeDurumu.BEKLIYOR).order_by('-inceleme_tarihi')[:50],
+    })
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def belge_onayla(request, pk):
+    belge = get_object_or_404(Belge, pk=pk)
+    try:
+        services.belge_onayla(request.user, belge)
+    except services.IslemHatasi as hata:
+        messages.error(request, str(hata))
+    else:
+        messages.success(request, f'{belge} onaylandı.')
+    return redirect('belgeler')
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def belge_reddet(request, pk):
+    belge = get_object_or_404(Belge, pk=pk)
+    try:
+        services.belge_reddet(request.user, belge, request.POST.get('gerekce', '').strip())
+    except services.IslemHatasi as hata:
+        messages.error(request, str(hata))
+    else:
+        messages.success(request, f'{belge} reddedildi.')
+    return redirect('belgeler')
+
+
+@rol_gerekli(KOORD, BASKAN, OGRENCI)
+def belge_dosyasi(request, pk):
+    """Belge dosyasını yetki kontrolüyle sunar. Öğrenci yalnızca kendi belgesini açabilir."""
+    belge = get_object_or_404(Belge.objects.select_related('ogrenci'), pk=pk)
+    if request.user.ogrenci_mi and belge.ogrenci.kullanici_id != request.user.pk:
+        raise PermissionDenied
+    try:
+        dosya = services.belge_deposu().open(belge.dosya_yolu, 'rb')
+    except FileNotFoundError:
+        raise Http404('Belge dosyası bulunamadı.')
+    cevap = FileResponse(dosya, content_type=belge.mime_turu, filename=belge.orijinal_ad)
+    cevap['Cache-Control'] = 'private, no-store'
+    return cevap

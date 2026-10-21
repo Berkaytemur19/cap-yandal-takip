@@ -141,7 +141,8 @@ Hoca (20 Ekim): öğrencinin ders seçeceği sayfa ve form yükleyeceği sayfa o
 
 - [x] Onay bekleyenler ekranı (onayla / gerekçeli reddet) — commit `528bb3a` (kullanıcı elle bakmayı sona bıraktı)
 - [x] Ders seçimi + ders talepleri: `services.ders_sec` / `talep_gonder` / `talep_kabul` / `talep_reddet`, `DersTalebi` modeli (migration 0002), `/benim/ders-sec/` (öğrenci), `/talepler/` (koordinatör), seed'de Zeynep için 1 bekleyen talep, `test_ders_secimi.py` (71 test geçti)
-- [ ] Form / belge yükleme (imzalı form, transkript; python-magic + boyut sınırı, web kökü dışında, yetkili indirme)
+- [x] Belge yükleme: `Belge` modeli (migration 0003), `services.belge_yukle` / `belge_onayla` / `belge_reddet` / `dosya_kontrol`, `/benim/belgeler/` (öğrenci), `/belgeler/` (koordinatör), `/belgeler/<pk>/dosya/` (yetkili indirme), öğrenci detayında belge tablosu, seed'de Elif için bekleyen sentetik PDF, `test_belgeler.py` (91 test geçti; sahiplik kontrolü bozulunca testin yakaladığı doğrulandı)
+- [ ] Öğrencinin not girişi (transkript şartıyla) — tasarım kararlarındaki madde
 - [ ] Kural uyarıları, mesajlaşma (zaman kalırsa)
 - [ ] Deploy (en son)
 - [ ] Kullanıcı en sonda elle kontrol edecek: onay ekranı, ders seçimi, talepler
@@ -156,6 +157,7 @@ Hoca (20 Ekim): öğrencinin ders seçeceği sayfa ve form yükleyeceği sayfa o
 - Koordinatörün girdiği deneme doğrudan onaylı; öğrencininki BEKLIYOR.
 - `takip` modelleri adminde salt okunur (değişiklik servis katmanından geçsin diye).
 - Ders seçimi: öğrenci yalnızca kendi listesindeki, tamamlanmamış, katalogda aktif derslerden seçer. Seçilebilir dönemler tarihten hesaplanır (Eylül–Ocak Güz, Şubat–Haziran Bahar, Temmuz–Ağustos Yaz): şimdiki dönem → ALINDI, sonraki dönem (yaz atlanır) → PLANLANDI. Her seçim BEKLIYOR deneme.
+- Belge: türler KAYIT_FORMU, DERS_SECIM_FORMU, TRANSKRIPT, DIGER; DERS_SECIM_FORMU ve TRANSKRIPT dönem ister.PDF/JPG/PNG, 5 MB (ayarlar: `BELGE_AZAMI_BOYUT`, `BELGE_IZINLI_TURLER`). Dosya `KORUMALI_DOSYA_KOKU/belgeler/<ogrenci_no>/<uuid>.<uzantı>`; sha256 tutulur. Aynı tür+dönemde önceki sürüm BEKLIYOR iken yeni sürüm yüklenemez; onay/ret sonrası yeni sürüm (surum+1) eklenir. Yalnızca öğrenci yükler. "Ek belge isteme" şimdilik ret gerekçesiyle yapılıyor.
 - Listede olmayan ders → `DersTalebi` (katalogdan ders VEYA serbest metin ad, açıklama zorunlu). Kabulde koordinatör katalogdan dersi seçer, `listeye_ders_ekle` çağrılır. Katalogda yoksa önce kataloğa ekler.
 
 ## Güvenlik

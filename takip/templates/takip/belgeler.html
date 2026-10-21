@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% load takip_etiketleri %}
+{% block baslik %}Belgeler{% endblock %}
+{% block icerik %}
+<h1 class="h3 mb-1">Onay bekleyen belgeler</h1>
+<p class="text-muted">
+  Dosyayı açıp kontrol ettikten sonra onaylayın ya da gerekçe yazarak reddedin. Ret gerekçesi öğrenciye gösterilir;
+  eksik belge için ne yüklemesi gerektiğini yazabilirsiniz.
+</p>
+
+<div class="table-responsive">
+<table class="table bg-white align-middle">
+  <thead><tr><th>Öğrenci</th><th>Belge</th><th>Dosya</th><th>Yükleme</th><th>İşlem</th></tr></thead>
+  <tbody>
+  {% for b in bekleyenler %}
+    <tr>
+      <td><a href="{% url 'ogrenci_detay' b.ogrenci.pk %}">{{ b.ogrenci.ogrenci_no }}</a><br><span class="small">{{ b.ogrenci.ad_soyad }} · {{ b.ogrenci.program_turu }}</span></td>
+      <td>{{ b.get_tur_display }}<br><span class="small">{{ b.donem|default:"" }} · sürüm {{ b.surum }}</span>
+        {% if b.aciklama %}<div class="small text-muted">{{ b.aciklama }}</div>{% endif %}</td>
+      <td class="small"><a href="{% url 'belge_dosyasi' b.pk %}" target="_blank" rel="noopener">{{ b.orijinal_ad }}</a><br>{{ b.boyut|filesizeformat }}</td>
+      <td class="small text-nowrap">{{ b.olusturulma|date:"d.m.Y H:i" }}</td>
+      <td style="min-width: 18rem">
+        <form method="post" action="{% url 'belge_onayla' b.pk %}" class="mb-2">
+          {% csrf_token %}
+          <button class="btn btn-sm btn-success">Onayla</button>
+        </form>
+        <form method="post" action="{% url 'belge_reddet' b.pk %}" class="input-group input-group-sm">
+          {% csrf_token %}
+          <input class="form-control" name="gerekce" placeholder="Ret gerekçesi (ör. imza eksik)" required>
+          <button class="btn btn-outline-danger">Reddet</button>
+        </form>
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="5" class="text-muted">Onay bekleyen belge yok.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if incelenenler %}
+<h2 class="h6 mt-4">Son incelenen belgeler (son 50)</h2>
+<table class="table table-sm bg-white small">
+  <thead><tr><th>Öğrenci</th><th>Belge</th><th>Dosya</th><th>Durum</th><th>İnceleyen</th><th>Tarih</th></tr></thead>
+  <tbody>
+  {% for b in incelenenler %}
+    <tr><td>{{ b.ogrenci.ogrenci_no }} {{ b.ogrenci.ad_soyad }}</td>
+        <td>{{ b.get_tur_display }} {{ b.donem|default:"" }} (s{{ b.surum }})</td>
+        <td><a href="{% url 'belge_dosyasi' b.pk %}" target="_blank" rel="noopener">{{ b.orijinal_ad }}</a></td>
+        <td><span class="badge bg-{{ b.durum|rozet }}">{{ b.get_durum_display }}</span>
+          {% if b.red_gerekcesi %}<div class="text-danger">{{ b.red_gerekcesi }}</div>{% endif %}</td>
+        <td>{{ b.inceleyen.username }}</td><td>{{ b.inceleme_tarihi|date:"d.m.Y" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

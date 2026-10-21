@@ -13,14 +13,40 @@ Kullanım:
 import sys
 
 from django.conf import settings
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from hesaplar.models import Kullanici, Rol
 from takip import services
-from takip.models import DenemeDurumu, Ders, DersTuru, KuralAyari, Ogrenci, Protokol, ProgramTuru
+from takip.models import (
+    BelgeTuru, DenemeDurumu, Ders, DersTuru, KuralAyari, Ogrenci, Protokol, ProgramTuru,
+)
 
 DEMO_SIFRE = 'Demo.2026'
+
+
+def demo_pdf(metin):
+    """Tek sayfalık, içinde tek satır yazı olan geçerli bir PDF üretir (demo belgesi için)."""
+    akis = f'BT /F1 14 Tf 72 760 Td ({metin}) Tj ET'.encode('latin-1')
+    nesneler = [
+        b'<< /Type /Catalog /Pages 2 0 R >>',
+        b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+        b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] '
+        b'/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+        b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+        b'<< /Length %d >>\nstream\n' % len(akis) + akis + b'\nendstream',
+    ]
+    pdf = b'%PDF-1.4\n'
+    konumlar = []
+    for i, nesne in enumerate(nesneler, 1):
+        konumlar.append(len(pdf))
+        pdf += b'%d 0 obj\n' % i + nesne + b'\nendobj\n'
+    xref = len(pdf)
+    pdf += b'xref\n0 %d\n0000000000 65535 f \n' % (len(nesneler) + 1)
+    pdf += b''.join(b'%010d 00000 n \n' % k for k in konumlar)
+    pdf += b'trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n' % (len(nesneler) + 1, xref)
+    return pdf
 
 # EEM → Bilgisayar Müh. ÇAP protokolü (CLAUDE.md, toplam 135 AKTS).
 # Yarıyıl, ders kodunun 5. hanesidir (3301354 → 3. yarıyıl).
@@ -84,6 +110,7 @@ GANO_KAYNAGI = 'OBİS transkripti (sentetik demo verisi)'
 # ogrenci_girisi: öğrencinin bu dönem kendisinin girdiği, onay bekleyen kayıtlar
 # cikarilan: koordinatörün gerekçeyle listeden çıkardığı dersler
 # talepler: öğrencinin listesinde olmayan ders için koordinatöre gönderdiği talep (katalog kodu, açıklama)
+# belgeler: öğrencinin yüklediği, onay bekleyen belge (tür, dosya adı); içerik sentetik PDF
 OGRENCILER = [
     {
         'ogrenci_no': '24330101', 'ad': 'Elif', 'soyad': 'Yılmaz',
@@ -104,6 +131,7 @@ OGRENCILER = [
             (2026, 'GUZ', '3301552', DenemeDurumu.ALINDI),
         ],
         'cikarilan': [],
+        'belgeler': [(BelgeTuru.KAYIT_FORMU, 'imzali_kayit_formu.pdf')],
     },
     {
         'ogrenci_no': '25330102', 'ad': 'Burak', 'soyad': 'Kaya',
@@ -254,3 +282,6 @@ class Command(BaseCommand):
             services.deneme_ekle(ogrenci.kullanici, kalem(kod), donem(yil, tur), durum)
         for kod, aciklama in veri.get('talepler', []):
             services.talep_gonder(ogrenci.kullanici, aciklama, ders=Ders.objects.get(kod=kod))
+        for tur, dosya_adi in veri.get('belgeler', []):
+            icerik = demo_pdf(f'SENTETIK DEMO BELGESI - {veri["ogrenci_no"]} - {tur}')
+            services.belge_yukle(ogrenci.kullanici, tur, SimpleUploadedFile(dosya_adi, icerik))

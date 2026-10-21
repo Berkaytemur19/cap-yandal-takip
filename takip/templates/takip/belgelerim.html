@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block baslik %}Belgelerim{% endblock %}
+{% block icerik %}
+<h1 class="h3 mb-1">Belgelerim</h1>
+<p class="text-muted">
+  İmzalı formlarınızı ve dönem sonu transkriptinizi buradan yükleyin. Yüklenen belge koordinatör onaylayana kadar
+  <span class="badge bg-warning text-dark">Onay bekliyor</span> görünür. Belgeler silinemez; reddedilen ya da
+  güncellenmesi gereken belgenin yeni sürümünü yükleyebilirsiniz, eski sürümler saklanır.
+</p>
+
+<div class="row g-4">
+  <div class="col-lg-4">
+    <form method="post" enctype="multipart/form-data" class="card">
+      {% csrf_token %}
+      <div class="card-body">
+        <h2 class="h6">Belge yükle</h2>
+        {% for hata in form.non_field_errors %}<div class="alert alert-danger">{{ hata }}</div>{% endfor %}
+        {% for alan in form %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ alan.id_for_label }}">{{ alan.label }}</label>
+            {{ alan }}
+            {% if alan.help_text %}<div class="form-text">{{ alan.help_text }}</div>{% endif %}
+            {% for hata in alan.errors %}<div class="text-danger small">{{ hata }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+        <button class="btn btn-primary">Yükle</button>
+      </div>
+    </form>
+  </div>
+  <div class="col-lg-8">
+    <h2 class="h6">Yüklediğim belgeler</h2>
+    {% include 'takip/_belge_tablosu.html' %}
+  </div>
+</div>
+{% endblock %}

@@ -2,7 +2,7 @@ from django import forms
 from django.core.validators import RegexValidator
 
 from .models import (
-    AkademikDonem, DenemeDurumu, Ders, DersDenemesi, DersTuru, DonemTuru, OgrenciDers, OnayDurumu,
+    DONEMLI_BELGE_TURLERI, AkademikDonem, BelgeTuru, DenemeDurumu, Ders, DersDenemesi, DersTuru, DonemTuru, OgrenciDers, OnayDurumu,
     ProgramTuru, Protokol,
 )
 
@@ -117,4 +117,28 @@ class TalepForm(BootstrapMixin, forms.Form):
             raise forms.ValidationError(
                 'Katalogdan bir ders seçin ya da katalogda olmayan dersin adını yazın (ikisinden biri).'
             )
+        return veri
+
+
+class BelgeYukleForm(BootstrapMixin, forms.Form):
+    tur = forms.ChoiceField(label='Belge türü', choices=BelgeTuru.choices)
+    donem = forms.ModelChoiceField(
+        label='Dönem', queryset=AkademikDonem.objects.none(), required=False,
+        empty_label='— Döneme ait değilse boş bırakın —',
+        help_text='Ders seçim formu ve transkript için zorunlu.',
+    )
+    dosya = forms.FileField(
+        label='Dosya', widget=forms.FileInput(attrs={'accept': '.pdf,.jpg,.jpeg,.png'}),
+        help_text='PDF, JPG veya PNG; en fazla 5 MB.',
+    )
+    aciklama = forms.CharField(label='Açıklama', max_length=300, required=False)
+
+    def __init__(self, *args, donemler, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['donem'].queryset = donemler
+
+    def clean(self):
+        veri = super().clean()
+        if veri.get('tur') in DONEMLI_BELGE_TURLERI and not veri.get('donem'):
+            self.add_error('donem', 'Bu belge türü için dönem seçilmesi zorunludur.')
         return veri

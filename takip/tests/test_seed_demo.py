@@ -1,6 +1,9 @@
 """seed_demo komutunun beklenen demo verisini kurduğunu ve tekrar çalıştırılabildiğini doğrular."""
 
+import shutil
+import tempfile
 from io import StringIO
+from pathlib import Path
 
 from django.core.management import CommandError, call_command
 from django.test import TestCase, override_settings
@@ -9,7 +12,7 @@ from django.urls import reverse
 from hesaplar.models import Kullanici
 from takip.management.commands.seed_demo import DEMO_SIFRE
 from takip.models import (
-    DersDenemesi, DersTalebi, IslemKaydi, KuralAyari, Ogrenci, OnayDurumu, Protokol, ProgramTuru,
+    Belge, BelgeDurumu, DersDenemesi, DersTalebi, IslemKaydi, KuralAyari, Ogrenci, OnayDurumu, Protokol, ProgramTuru,
     TalepDurumu,
 )
 
@@ -20,6 +23,20 @@ def _seed():
 
 @override_settings(DEBUG=True)
 class SeedDemoTest(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Demo belgesi gerçek korumali_dosyalar klasörüne değil geçici klasöre yazılır.
+        cls.depo_koku = Path(tempfile.mkdtemp())
+        cls.depo_ayari = override_settings(KORUMALI_DOSYA_KOKU=cls.depo_koku)
+        cls.depo_ayari.enable()
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        cls.depo_ayari.disable()
+        shutil.rmtree(cls.depo_koku, ignore_errors=True)
+
     @classmethod
     def setUpTestData(cls):
         with override_settings(DEBUG=True):
@@ -53,6 +70,12 @@ class SeedDemoTest(TestCase):
 
     def test_ogrenci_girisleri_onay_bekler(self):
         self.assertEqual(DersDenemesi.objects.filter(onay_durumu=OnayDurumu.BEKLIYOR).count(), 4)
+
+    def test_bekleyen_demo_belgesi(self):
+        belge = Belge.objects.get()
+        self.assertEqual((belge.ogrenci.ogrenci_no, belge.durum), ('24330101', BelgeDurumu.BEKLIYOR))
+        self.assertEqual(belge.mime_turu, 'application/pdf')
+        self.assertTrue((self.depo_koku / belge.dosya_yolu).is_file())
 
     def test_bekleyen_ders_talebi(self):
         talep = DersTalebi.objects.get()
