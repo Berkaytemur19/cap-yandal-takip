@@ -17,8 +17,9 @@ from django.utils import timezone
 from hesaplar.models import Rol
 
 from .models import (
-    AkademikDonem, AnaDalGanoKaydi, DenemeDurumu, Ders, DersDenemesi, IslemKaydi,
-    KuralAyari, Ogrenci, OgrenciDers, OnayDurumu, Protokol, ProtokolDersi,
+    AkademikDonem, AnaDalGanoKaydi, DenemeDurumu, Ders, DersDenemesi, DersTalebi, DersTuru,
+    DonemTuru, IslemKaydi, KayitDurumu, KuralAyari, Ogrenci, OgrenciDers, OnayDurumu, Protokol,
+    ProtokolDersi, TalepDurumu,
 )
 
 
@@ -356,6 +357,150 @@ def deneme_iptal(kullanici, deneme, gerekce):
     islem_kaydet(kullanici, 'deneme_iptal', deneme, eski=eski,
                  yeni=_deger(deneme, ['onay_durumu']), aciklama=gerekce)
     return deneme
+
+
+# ---------------------------------------------------------------------------
+# Öğrencinin ders seçimi ve ders talepleri
+# ---------------------------------------------------------------------------
+
+def donem_tarihten(tarih):
+    """Tarihin düştüğü akademik dönem: (başlangıç yılı, dönem türü).
+
+    Eylül–Ocak Güz, Şubat–Haziran Bahar, Temmuz–Ağustos Yaz.
+    """
+    if tarih.month >= 9:
+        return tarih.year, DonemTuru.GUZ
+    if tarih.month == 1:
+        return tarih.year - 1, DonemTuru.GUZ
+    if tarih.month <= 6:
+        return tarih.year - 1, DonemTuru.BAHAR
+    return tarih.year - 1, DonemTuru.YAZ
+
+
+def secilebilir_donemler(tarih=None):
+    """Öğrencinin ders seçebileceği dönemler: [(yıl, dönem, deneme durumu), ...].
+
+    İçinde bulunulan dönemde seçilen ders 'alındı', bir sonraki dönemde 'planlandı' olur.
+    Yaz okulu bir sonraki dönem olarak önerilmez.
+    """
+    yil, tur = donem_tarihten(tarih or timezone.localdate())
+    if tur == DonemTuru.GUZ:
+        sonraki = (yil, DonemTuru.BAHAR)
+    else:
+        sonraki = (yil + 1, DonemTuru.GUZ)
+    return [(yil, tur, DenemeDurumu.ALINDI), (*sonraki, DenemeDurumu.PLANLANDI)]
+
+
+def _ogrenci_kaydi(kullanici):
+    if kullanici is None or kullanici.rol != Rol.OGRENCI:
+        raise PermissionDenied('Bu işlemi yalnızca öğrenci yapabilir.')
+    try:
+        return kullanici.ogrenci
+    except Ogrenci.DoesNotExist:
+        raise PermissionDenied('Bu hesaba bağlı öğrenci kaydı yok.')
+
+
+@transaction.atomic
+def ders_sec(kullanici, kalemler, yil, donem_turu, tarih=None):
+    """Öğrenci ders listesindeki dersleri bir dönem için seçer. Her seçim ayrı, onay bekleyen denemedir."""
+    ogrenci = _ogrenci_kaydi(kullanici)
+    if ogrenci.kayit_durumu != KayitDurumu.AKTIF:
+        raise IslemHatasi('Kaydı aktif olmayan öğrenci ders seçemez.')
+    if not kalemler:
+        raise IslemHatasi('En az bir ders seçmelisiniz.')
+    durumlar = {(y, t): d for y, t, d in secilebilir_donemler(tarih)}
+    if (yil, donem_turu) not in durumlar:
+        raise IslemHatasi('Bu dönem için ders seçimi yapılamaz.')
+
+    donem, yeni = AkademikDonem.objects.get_or_create(baslangic_yili=yil, donem=donem_turu)
+    if yeni:
+        islem_kaydet(kullanici, 'donem_ekle', donem, yeni=_deger(donem, ['baslangic_yili', 'donem']))
+
+    denemeler = []
+    for kalem in kalemler:
+        if kalem.ogrenci_id != ogrenci.pk:
+            raise PermissionDenied
+        if not kalem.ders.aktif:
+            raise IslemHatasi(f'{kalem.ders.kod}: ders katalogda pasif, seçilemez.')
+        try:
+            denemeler.append(deneme_ekle(kullanici, kalem, donem, durumlar[(yil, donem_turu)]))
+        except IslemHatasi as hata:
+            raise IslemHatasi(f'{kalem.ders.kod}: {hata}')
+    return denemeler
+
+
+TALEP_ALANLARI = ['ders', 'istenen_ders', 'aciklama', 'durum']
+
+
+@transaction.atomic
+def talep_gonder(kullanici, aciklama, ders=None, istenen_ders=''):
+    """Ders listesinde olmayan ders için talep. Ya katalogdan ders seçilir ya da ders adı yazılır."""
+    ogrenci = _ogrenci_kaydi(kullanici)
+    istenen_ders = (istenen_ders or '').strip()
+    aciklama = (aciklama or '').strip()
+    if bool(ders) == bool(istenen_ders):
+        raise IslemHatasi('Katalogdan bir ders seçin ya da katalogda olmayan dersin adını yazın (ikisinden biri).')
+    if not aciklama:
+        raise IslemHatasi('Talebin nedenini açıklamanız zorunludur.')
+    if ders:
+        if not ders.aktif:
+            raise IslemHatasi('Pasif ders için talep gönderilemez.')
+        if ders.tur != DersTuru.SECMELI_HAVUZ and \
+                ogrenci.ders_listesi.filter(ders=ders, listede=True).exists():
+            raise IslemHatasi(f'{ders.kod} zaten ders listenizde.')
+        if ogrenci.ders_talepleri.filter(ders=ders, durum=TalepDurumu.BEKLIYOR).exists():
+            raise IslemHatasi(f'{ders.kod} için bekleyen bir talebiniz zaten var.')
+    talep = DersTalebi.objects.create(
+        ogrenci=ogrenci, ders=ders, istenen_ders=istenen_ders, aciklama=aciklama,
+    )
+    islem_kaydet(kullanici, 'talep_gonder', talep, yeni=_deger(talep, TALEP_ALANLARI))
+    return talep
+
+
+def _talep_bekliyor_olmali(talep):
+    if talep.durum != TalepDurumu.BEKLIYOR:
+        raise IslemHatasi('Bu talep zaten yanıtlanmış.')
+
+
+@transaction.atomic
+def talep_kabul(kullanici, talep, ders, yanit=''):
+    """Talebi kabul eder ve dersi öğrencinin listesine ekler.
+
+    Talep katalogda olmayan bir ders içinse koordinatör önce dersi kataloğa ekler, sonra burada seçer.
+    """
+    _koordinator_olmali(kullanici)
+    _talep_bekliyor_olmali(talep)
+    if ders is None:
+        raise IslemHatasi('Listeye eklenecek dersi katalogdan seçin.')
+    kalem = listeye_ders_ekle(
+        kullanici, talep.ogrenci, ders, gerekce=f'Öğrenci talebi #{talep.pk}: {talep.aciklama}',
+    )
+    eski = _deger(talep, ['durum'])
+    talep.durum = TalepDurumu.KABUL
+    talep.yanit = (yanit or '').strip()
+    talep.yanitlayan = kullanici
+    talep.yanit_tarihi = timezone.now()
+    talep.eklenen_kalem = kalem
+    talep.save()
+    islem_kaydet(kullanici, 'talep_kabul', talep, eski=eski,
+                 yeni={**_deger(talep, ['durum']), 'eklenen_ders': ders.kod}, aciklama=talep.yanit)
+    return talep
+
+
+@transaction.atomic
+def talep_reddet(kullanici, talep, gerekce):
+    _koordinator_olmali(kullanici)
+    _gerekce_olmali(gerekce)
+    _talep_bekliyor_olmali(talep)
+    eski = _deger(talep, ['durum'])
+    talep.durum = TalepDurumu.RED
+    talep.yanit = gerekce.strip()
+    talep.yanitlayan = kullanici
+    talep.yanit_tarihi = timezone.now()
+    talep.save()
+    islem_kaydet(kullanici, 'talep_reddet', talep, eski=eski,
+                 yeni=_deger(talep, ['durum']), aciklama=talep.yanit)
+    return talep
 
 
 # ---------------------------------------------------------------------------

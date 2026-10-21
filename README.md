@@ -51,7 +51,8 @@ Tarayıcıda **http://127.0.0.1:8000/giris/** adresini açın. Sunucuyu durdurma
 | `25330201` | Öğrenci — Zeynep Arslan (YDP) | Yandal öğrencisi |
 | `26330202` | Öğrenci — Emre Çelik (YDP) | Yeni kabul, henüz dersi yok |
 
-Öğrencilerin bu dönem kendi girdiği 4 ders **onay bekliyor** durumundadır; koordinatör ana sayfasında görünür.
+Öğrencilerin bu dönem kendi girdiği 4 ders **onay bekliyor** durumundadır (koordinatör → "Onay bekleyenler").
+Zeynep'in listesinde olmayan bir ders için gönderdiği 1 **ders talebi** yanıt bekler (koordinatör → "Ders talepleri").
 
 - `seed_demo` tekrar çalıştırılabilir: var olan kayıtları atlar, hiçbir şeyi çoğaltmaz.
 - Bilinen şifreler kullandığı için yalnızca geliştirme modunda (`DEBUG` açık) çalışır.
@@ -64,21 +65,23 @@ Tarayıcıda **http://127.0.0.1:8000/giris/** adresini açın. Sunucuyu durdurma
 .\.venv\Scripts\python.exe manage.py test
 ```
 
-40 test; şunları doğrular:
+71 test; şunları doğrular:
 
 - **Servis katmanı:** iş kuralları (onay kilidi, gerekçe zorunluluğu, silme yasağı, kural ayarı sürümleri).
 - **Ekranlar:** her rol kendi sayfalarını açabiliyor; öğrenci ekleme ve katalog işlemleri çalışıyor.
 - **Yetki:** öğrenci URL'deki numarayı değiştirerek başkasının kaydını açamıyor; bölüm başkanı ve öğrenci
   doğrudan POST isteğiyle veri değiştiremiyor (403, veritabanı ve işlem kaydı değişmiyor).
+- **Ders seçimi ve talepler:** öğrenci yalnızca kendi listesinden ve izin verilen dönemlerde seçebiliyor;
+  talep kabul edilince ders listeye ekleniyor; öğrenci ve bölüm başkanı talep yanıtlayamıyor.
 - **Demo verisi:** `seed_demo` beklenen veriyi kuruyor ve ikinci çalıştırmada çoğaltmıyor.
 
 ## Roller
 
 | Rol | Yetki |
 |---|---|
-| **Koordinatör** | Öğrenci ekler ve hesabını açar, ders kataloğunu yönetir, ders kayıtlarını onaylar / düzeltir / iptal eder |
+| **Koordinatör** | Öğrenci ekler ve hesabını açar, ders kataloğunu yönetir, ders kayıtlarını onaylar / gerekçeyle reddeder, ders taleplerini yanıtlar |
 | **Bölüm Başkanı** | Kayıtları ve işlem geçmişini görür; hiçbir şeyi değiştiremez |
-| **Öğrenci** | Yalnızca kendi ders listesini ve ilerlemesini görür; kendi kendine kayıt olamaz |
+| **Öğrenci** | Yalnızca kendi ders listesini ve ilerlemesini görür; listesinden ders seçer, listesinde olmayan ders için talep gönderir; kendi kendine kayıt olamaz |
 
 Yetki her sayfada **sunucu tarafında** kontrol edilir (`hesaplar/yetki.py` → `rol_gerekli`); servis
 katmanı da aynı kontrolü ayrıca yapar.
@@ -89,6 +92,9 @@ katmanı da aynı kontrolü ayrıca yapar.
 - Öğrencinin girdiği ders kaydı **onay bekliyor** olarak başlar ve onaylanana kadar AKTS hesabına girmez.
   Onaylanan kayıt kilitlenir; düzeltmeyi yalnızca koordinatör gerekçe yazarak yapar.
 - Aynı ders birden çok kez alınabilir; her alınış ayrı kayıttır.
+- **Ders seçimi:** öğrenci içinde bulunulan dönem ("alındı") veya bir sonraki dönem ("planlandı") için
+  ders listesinden seçer; serbest metinle ders giremez. Listesinde olmayan ders için koordinatöre talep
+  gönderir; kabul edilirse ders listesine koordinatör tarafından eklenir.
 - Yönerge eşikleri (GANO, AKTS, süre) koda gömülü değildir; **sürümlü kural ayarlarından** gelir.
 
 ## Proje yapısı
@@ -108,18 +114,17 @@ templates/              Ortak şablonlar (base.html, giriş, 403)
 ## Durum
 
 İlk sürüm (Ekim 2026): giriş ve roller, öğrenci ekleme, ders kataloğu, öğrenci ders listesi ve AKTS
-özeti, işlem geçmişi, demo verisi.
+özeti, işlem geçmişi, demo verisi. Sonra eklenenler: onay / ret ekranı, öğrencinin ders seçimi ve ders talepleri.
 
 Henüz yapılmayanlar:
 
 - Belge yükleme (imzalı form, transkript) ve dosya kontrolü
 - Koordinatör ↔ öğrenci mesajlaşma
-- Onay / ret ekranları ve öğrencinin katalogdan ders seçme ekranı
 - Kural ayarlarına göre uyarı üretme (GANO, ders almama, süre)
 
 ## Sorun giderme
 
-- **"You have unapplied migration(s)" uyarısı:** `.\.venv\Scripts\python.exe manage.py migrate` çalıştırın.
+- **"You have unapplied migration(s)" uyarısı** (ör. yeni bir sürümü çektikten sonra): `.\.venv\Scripts\python.exe manage.py migrate` çalıştırın.
 - **Giriş kilitlendi:** şifre 5 kez yanlış girilince hesap 30 dakika kilitlenir. Hemen açmak için:
   `.\.venv\Scripts\python.exe manage.py axes_reset`
 - **Temiz başlamak:** sunucuyu durdurun, `db.sqlite3` dosyasını silin, ardından `migrate` ve `seed_demo`

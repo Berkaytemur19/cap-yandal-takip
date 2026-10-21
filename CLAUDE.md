@@ -135,6 +135,17 @@ Oturum hedefi (7 adım): 1) git/venv/requirements/Django, 2) üç rollü kullan�
 
 **İlk sürüm oturumunun 7 adımı tamamlandı (19 Ekim 2026).** Sıradaki özellikler README'deki "Henüz yapılmayanlar" listesinde. GitHub (gizli repo): https://github.com/Berkaytemur19/cap-yandal-takip
 
+## Hoca geri bildirimi sonrası (20–21 Ekim 2026)
+
+Hoca (20 Ekim): öğrencinin ders seçeceği sayfa ve form yükleyeceği sayfa olmalı; en sonda deploy (Vercel dedi — Vercel Django+SQLite+dosya yükleme için uygun değil, PythonAnywhere önerildi, hocaya sorulacak).
+
+- [x] Onay bekleyenler ekranı (onayla / gerekçeli reddet) — commit `528bb3a` (kullanıcı elle bakmayı sona bıraktı)
+- [x] Ders seçimi + ders talepleri: `services.ders_sec` / `talep_gonder` / `talep_kabul` / `talep_reddet`, `DersTalebi` modeli (migration 0002), `/benim/ders-sec/` (öğrenci), `/talepler/` (koordinatör), seed'de Zeynep için 1 bekleyen talep, `test_ders_secimi.py` (71 test geçti)
+- [ ] Form / belge yükleme (imzalı form, transkript; python-magic + boyut sınırı, web kökü dışında, yetkili indirme)
+- [ ] Kural uyarıları, mesajlaşma (zaman kalırsa)
+- [ ] Deploy (en son)
+- [ ] Kullanıcı en sonda elle kontrol edecek: onay ekranı, ders seçimi, talepler
+
 ### Alınan tasarım kararları (kullanıcı onayladı)
 - django-simple-history yerine kendi append-only `IslemKaydi` modelimiz.
 - Teknik seçmeliler katalogda `SECMELI_HAVUZ` türünde yer tutucu ders; gerçek seçmeli eşleştirmesi sonra.
@@ -144,6 +155,8 @@ Oturum hedefi (7 adım): 1) git/venv/requirements/Django, 2) üç rollü kullan�
 - Öğrenci şimdilik yalnızca PLANLANDI/ALINDI girebilir; not girişi transkript yükleme özelliğiyle açılacak.
 - Koordinatörün girdiği deneme doğrudan onaylı; öğrencininki BEKLIYOR.
 - `takip` modelleri adminde salt okunur (değişiklik servis katmanından geçsin diye).
+- Ders seçimi: öğrenci yalnızca kendi listesindeki, tamamlanmamış, katalogda aktif derslerden seçer. Seçilebilir dönemler tarihten hesaplanır (Eylül–Ocak Güz, Şubat–Haziran Bahar, Temmuz–Ağustos Yaz): şimdiki dönem → ALINDI, sonraki dönem (yaz atlanır) → PLANLANDI. Her seçim BEKLIYOR deneme.
+- Listede olmayan ders → `DersTalebi` (katalogdan ders VEYA serbest metin ad, açıklama zorunlu). Kabulde koordinatör katalogdan dersi seçer, `listeye_ders_ekle` çağrılır. Katalogda yoksa önce kataloğa ekler.
 
 ## Güvenlik
 

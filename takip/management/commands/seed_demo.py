@@ -83,6 +83,7 @@ GANO_KAYNAGI = 'OBİS transkripti (sentetik demo verisi)'
 # gecmis: koordinatörün geriye dönük girdiği onaylı dersler (yıl, dönem, kod, durum, not)
 # ogrenci_girisi: öğrencinin bu dönem kendisinin girdiği, onay bekleyen kayıtlar
 # cikarilan: koordinatörün gerekçeyle listeden çıkardığı dersler
+# talepler: öğrencinin listesinde olmayan ders için koordinatöre gönderdiği talep (katalog kodu, açıklama)
 OGRENCILER = [
     {
         'ogrenci_no': '24330101', 'ad': 'Elif', 'soyad': 'Yılmaz',
@@ -131,6 +132,7 @@ OGRENCILER = [
         'gano': [(2025, 'BAHAR', '2.40')],
         'ogrenci_girisi': [(2026, 'GUZ', '3301351', DenemeDurumu.ALINDI)],
         'cikarilan': [],
+        'talepler': [('3301753', 'Ana dalımda veri analizi yapıyorum; yandal planıma eklemek istiyorum.')],
     },
     {
         'ogrenci_no': '26330202', 'ad': 'Emre', 'soyad': 'Çelik',
@@ -250,3 +252,5 @@ class Command(BaseCommand):
             services.listeden_ders_cikar(koord, kalem(kod), gerekce)
         for yil, tur, kod, durum in veri['ogrenci_girisi']:
             services.deneme_ekle(ogrenci.kullanici, kalem(kod), donem(yil, tur), durum)
+        for kod, aciklama in veri.get('talepler', []):
+            services.talep_gonder(ogrenci.kullanici, aciklama, ders=Ders.objects.get(kod=kod))

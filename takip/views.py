@@ -15,8 +15,10 @@ from hesaplar.models import Rol
 from hesaplar.yetki import rol_gerekli
 
 from . import services
-from .forms import DersForm, OgrenciEkleForm
-from .models import Ders, DersDenemesi, IslemKaydi, Ogrenci, OnayDurumu, ProgramTuru
+from .forms import DersForm, DersSecForm, OgrenciEkleForm, TalepForm
+from .models import (
+    Ders, DersDenemesi, DersTalebi, IslemKaydi, Ogrenci, OnayDurumu, ProgramTuru, TalepDurumu,
+)
 
 KOORD = Rol.KOORDINATOR
 BASKAN = Rol.BOLUM_BASKANI
@@ -42,6 +44,7 @@ def ana_sayfa(request):
     )
     sayilar['bekleyen'] = DersDenemesi.objects.filter(onay_durumu=OnayDurumu.BEKLIYOR).count()
     sayilar['aktif_ders'] = Ders.objects.filter(aktif=True).count()
+    sayilar['talep'] = DersTalebi.objects.filter(durum=TalepDurumu.BEKLIYOR).count()
     son_islemler = IslemKaydi.objects.select_related('kullanici')[:8]
     return render(request, 'takip/ana_sayfa.html', {'sayilar': sayilar, 'son_islemler': son_islemler})
 
@@ -217,3 +220,90 @@ def deneme_reddet(request, pk):
     else:
         messages.success(request, f'{deneme.liste_kalemi} ({deneme.donem}) reddedildi.')
     return redirect('onay_bekleyenler')
+
+
+# ---------------------------------------------------------------------------
+# Öğrencinin ders seçimi ve ders talepleri
+# ---------------------------------------------------------------------------
+
+@rol_gerekli(OGRENCI)
+def ders_sec(request):
+    """Öğrenci ders listesinden dönemlik ders seçer; listesinde olmayan ders için talep gönderir.
+
+    Sayfada iki form var; hangisinin gönderildiğini gizli 'islem' alanı belirler.
+    """
+    try:
+        ogrenci = request.user.ogrenci
+    except Ogrenci.DoesNotExist:
+        raise Http404('Bu hesaba bağlı öğrenci kaydı yok.')
+
+    donemler = services.secilebilir_donemler()
+    islem = request.POST.get('islem') if request.method == 'POST' else None
+    secim_formu = DersSecForm(request.POST if islem == 'sec' else None, ogrenci=ogrenci, donemler=donemler)
+    talep_formu = TalepForm(request.POST if islem == 'talep' else None, ogrenci=ogrenci)
+
+    if islem == 'sec' and secim_formu.is_valid():
+        yil, tur = secim_formu.secilen_donem()
+        kalemler = list(secim_formu.cleaned_data['kalemler'])
+        try:
+            services.ders_sec(request.user, kalemler, yil, tur)
+        except services.IslemHatasi as hata:
+            secim_formu.add_error(None, str(hata))
+        else:
+            messages.success(request, f'{len(kalemler)} ders seçildi; koordinatör onayı bekleniyor.')
+            return redirect('ders_sec')
+
+    if islem == 'talep' and talep_formu.is_valid():
+        v = talep_formu.cleaned_data
+        try:
+            services.talep_gonder(request.user, v['aciklama'], ders=v['ders'], istenen_ders=v['istenen_ders'])
+        except services.IslemHatasi as hata:
+            talep_formu.add_error(None, str(hata))
+        else:
+            messages.success(request, 'Ders talebiniz koordinatöre gönderildi.')
+            return redirect('ders_sec')
+
+    return render(request, 'takip/ders_sec.html', {
+        'ogrenci': ogrenci,
+        'secim_formu': secim_formu,
+        'talep_formu': talep_formu,
+        'talepler': ogrenci.ders_talepleri.select_related('ders', 'eklenen_kalem__ders'),
+    })
+
+
+@rol_gerekli(KOORD)
+def talepler(request):
+    """Öğrencilerin ders talepleri. Bekleyenler en üstte, en eski önce."""
+    tum = DersTalebi.objects.select_related('ogrenci', 'ders', 'yanitlayan')
+    return render(request, 'takip/talepler.html', {
+        'bekleyenler': tum.filter(durum=TalepDurumu.BEKLIYOR).order_by('olusturulma'),
+        'yanitlananlar': tum.exclude(durum=TalepDurumu.BEKLIYOR).order_by('-yanit_tarihi')[:50],
+        'dersler': Ders.objects.filter(aktif=True).order_by('kod'),
+    })
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def talep_kabul(request, pk):
+    talep = get_object_or_404(DersTalebi, pk=pk)
+    ders = Ders.objects.filter(pk=request.POST.get('ders') or None).first()
+    try:
+        services.talep_kabul(request.user, talep, ders, request.POST.get('yanit', ''))
+    except services.IslemHatasi as hata:
+        messages.error(request, str(hata))
+    else:
+        messages.success(request, f'Talep kabul edildi; {ders.kod} {talep.ogrenci.ad_soyad} listesine eklendi.')
+    return redirect('talepler')
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def talep_reddet(request, pk):
+    talep = get_object_or_404(DersTalebi, pk=pk)
+    try:
+        services.talep_reddet(request.user, talep, request.POST.get('gerekce', '').strip())
+    except services.IslemHatasi as hata:
+        messages.error(request, str(hata))
+    else:
+        messages.success(request, f'{talep.ogrenci.ad_soyad} adlı öğrencinin talebi reddedildi.')
+    return redirect('talepler')

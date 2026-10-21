@@ -8,6 +8,8 @@ RENKLER = {
     'PLANLANDI': 'secondary', 'CIKARILDI': 'dark', 'YOK': 'light text-dark',
     # onay durumu
     'BEKLIYOR': 'warning text-dark', 'ONAYLANDI': 'success', 'REDDEDILDI': 'danger', 'IPTAL': 'dark',
+    # ders talebi durumu
+    'KABUL': 'success', 'RED': 'danger',
     # kayıt durumu
     'AKTIF': 'success', 'MEZUN': 'primary', 'SERTIFIKA_ALDI': 'primary', 'KAYDI_SILINDI': 'danger',
 }

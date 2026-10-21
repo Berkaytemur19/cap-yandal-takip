@@ -9,7 +9,8 @@ from django.urls import reverse
 from hesaplar.models import Kullanici
 from takip.management.commands.seed_demo import DEMO_SIFRE
 from takip.models import (
-    DersDenemesi, IslemKaydi, KuralAyari, Ogrenci, OnayDurumu, Protokol, ProgramTuru,
+    DersDenemesi, DersTalebi, IslemKaydi, KuralAyari, Ogrenci, OnayDurumu, Protokol, ProgramTuru,
+    TalepDurumu,
 )
 
 
@@ -52,6 +53,11 @@ class SeedDemoTest(TestCase):
 
     def test_ogrenci_girisleri_onay_bekler(self):
         self.assertEqual(DersDenemesi.objects.filter(onay_durumu=OnayDurumu.BEKLIYOR).count(), 4)
+
+    def test_bekleyen_ders_talebi(self):
+        talep = DersTalebi.objects.get()
+        self.assertEqual((talep.ogrenci.ogrenci_no, talep.ders.kod), ('25330201', '3301753'))
+        self.assertEqual(talep.durum, TalepDurumu.BEKLIYOR)
 
     def test_her_sey_islem_kaydina_duser(self):
         self.assertEqual(IslemKaydi.objects.filter(islem='ogrenci_ekle').count(), 4)

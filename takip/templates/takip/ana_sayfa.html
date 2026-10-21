@@ -21,6 +21,12 @@
   </div></div></div>
 </div>
 
+{% if user.koordinator_mu and sayilar.talep %}
+<div class="alert alert-info">
+  Yanıt bekleyen <strong>{{ sayilar.talep }}</strong> ders talebi var. <a href="{% url 'talepler' %}">Talepleri incele</a>
+</div>
+{% endif %}
+
 <div class="d-flex gap-2 mb-4 flex-wrap">
   <a class="btn btn-primary" href="{% url 'ogrenci_listesi' %}">Öğrenci listesi</a>
   {% if user.koordinator_mu %}

@@ -359,6 +359,48 @@ class DersDenemesi(SilinmezModel):
         super().save(*args, **kwargs)
 
 
+class TalepDurumu(models.TextChoices):
+    BEKLIYOR = 'BEKLIYOR', 'Bekliyor'
+    KABUL = 'KABUL', 'Kabul edildi'
+    RED = 'RED', 'Reddedildi'
+
+
+class DersTalebi(SilinmezModel):
+    """Öğrencinin ders listesinde olmayan bir ders için koordinatöre gönderdiği talep.
+
+    Ders katalogdaysa `ders` seçilir; katalogda yoksa `istenen_ders` alanına yazılır.
+    Öğrenci ders listesine kendisi ders ekleyemez; talep kabul edilince koordinatör ekler.
+    """
+
+    ogrenci = models.ForeignKey(Ogrenci, on_delete=models.PROTECT, related_name='ders_talepleri')
+    ders = models.ForeignKey(Ders, on_delete=models.PROTECT, null=True, blank=True, related_name='+')
+    istenen_ders = models.CharField('katalogda olmayan ders', max_length=200, blank=True)
+    aciklama = models.TextField('açıklama')
+    durum = models.CharField(max_length=10, choices=TalepDurumu.choices, default=TalepDurumu.BEKLIYOR)
+
+    yanit = models.TextField('yanıt / gerekçe', blank=True)
+    yanitlayan = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+', null=True, blank=True,
+    )
+    yanit_tarihi = models.DateTimeField('yanıt tarihi', null=True, blank=True)
+    eklenen_kalem = models.ForeignKey(
+        OgrenciDers, on_delete=models.PROTECT, related_name='+', null=True, blank=True,
+        verbose_name='listeye eklenen ders',
+    )
+
+    class Meta:
+        verbose_name = 'Ders talebi'
+        verbose_name_plural = 'Ders talepleri'
+        ordering = ['-olusturulma']
+
+    def __str__(self):
+        return f'{self.ogrenci.ogrenci_no} — {self.istenen_metin}'
+
+    @property
+    def istenen_metin(self):
+        return str(self.ders) if self.ders_id else self.istenen_ders
+
+
 # ---------------------------------------------------------------------------
 # Kural ayarları (sürümlü)
 # ---------------------------------------------------------------------------

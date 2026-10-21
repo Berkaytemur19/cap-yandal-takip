@@ -4,6 +4,9 @@
 <h1 class="h3">{{ ogrenci.ad_soyad }}</h1>
 {% include 'takip/_ogrenci_bilgileri.html' %}
 
-<h2 class="h5">Ders listem</h2>
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h2 class="h5 mb-0">Ders listem</h2>
+  <a class="btn btn-primary btn-sm" href="{% url 'ders_sec' %}">Ders seç / talep gönder</a>
+</div>
 {% include 'takip/_ders_listesi.html' %}
 {% endblock %}

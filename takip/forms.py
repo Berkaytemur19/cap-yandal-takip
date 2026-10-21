@@ -1,7 +1,10 @@
 from django import forms
 from django.core.validators import RegexValidator
 
-from .models import DersTuru, DonemTuru, ProgramTuru, Protokol
+from .models import (
+    AkademikDonem, DenemeDurumu, Ders, DersDenemesi, DersTuru, DonemTuru, OgrenciDers, OnayDurumu,
+    ProgramTuru, Protokol,
+)
 
 
 class BootstrapMixin:
@@ -49,3 +52,69 @@ class DersForm(BootstrapMixin, forms.Form):
         if kod_degistirilemez:
             self.fields['kod'].disabled = True
             self.fields['kod'].help_text = 'Ders kodu benzersiz anahtardır, değiştirilemez.'
+
+
+class DersSecForm(forms.Form):
+    """Öğrencinin kendi ders listesinden bir dönem için ders seçmesi.
+
+    Seçenekler yalnızca öğrencinin kendi listesindeki, tamamlanmamış ve katalogda aktif derslerdir;
+    başka öğrencinin kalem numarası gönderilirse form geçersiz olur.
+    """
+
+    donem = forms.ChoiceField(label='Dönem', widget=forms.RadioSelect)
+    kalemler = forms.ModelMultipleChoiceField(
+        label='Dersler', queryset=OgrenciDers.objects.none(), widget=forms.CheckboxSelectMultiple,
+        error_messages={'required': 'En az bir ders seçmelisiniz.'},
+    )
+
+    def __init__(self, *args, ogrenci, donemler, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['donem'].choices = [
+            (f'{yil}-{tur}', f'{AkademikDonem(baslangic_yili=yil, donem=tur)} — {DenemeDurumu(durum).label.lower()}')
+            for yil, tur, durum in donemler
+        ]
+        self.fields['donem'].initial = self.fields['donem'].choices[0][0]
+        tamamlanan = DersDenemesi.objects.filter(
+            liste_kalemi__ogrenci=ogrenci, onay_durumu=OnayDurumu.ONAYLANDI,
+            durum__in=[DenemeDurumu.GECTI, DenemeDurumu.MUAF],
+        ).values('liste_kalemi')
+        self.fields['kalemler'].queryset = (
+            ogrenci.ders_listesi.filter(listede=True, ders__aktif=True)
+            .exclude(pk__in=tamamlanan)
+            .select_related('ders')
+            .prefetch_related('denemeler__donem')
+            .order_by('yariyil', 'ders__kod')
+        )
+
+    def secilen_donem(self):
+        yil, tur = self.cleaned_data['donem'].split('-')
+        return int(yil), tur
+
+
+class TalepForm(BootstrapMixin, forms.Form):
+    ders = forms.ModelChoiceField(
+        label='Katalogdaki ders', queryset=Ders.objects.none(), required=False,
+        empty_label='— Katalogda yoksa boş bırakın —',
+    )
+    istenen_ders = forms.CharField(
+        label='Katalogda olmayan ders', max_length=200, required=False,
+        help_text='Dersin kodu ve adı, örn: 3301999 Bulut Bilişim',
+    )
+    aciklama = forms.CharField(
+        label='Açıklama', widget=forms.Textarea(attrs={'rows': 3}),
+        help_text='Bu dersi neden almak istediğinizi kısaca yazın.',
+    )
+
+    def __init__(self, *args, ogrenci, **kwargs):
+        super().__init__(*args, **kwargs)
+        listedeki = ogrenci.ders_listesi.filter(listede=True).exclude(
+            ders__tur=DersTuru.SECMELI_HAVUZ).values('ders')
+        self.fields['ders'].queryset = Ders.objects.filter(aktif=True).exclude(pk__in=listedeki)
+
+    def clean(self):
+        veri = super().clean()
+        if bool(veri.get('ders')) == bool((veri.get('istenen_ders') or '').strip()):
+            raise forms.ValidationError(
+                'Katalogdan bir ders seçin ya da katalogda olmayan dersin adını yazın (ikisinden biri).'
+            )
+        return veri

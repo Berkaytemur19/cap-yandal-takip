@@ -20,6 +20,7 @@
         {% if user.koordinator_mu %}
           <li class="nav-item"><a class="nav-link" href="{% url 'ogrenci_listesi' %}">Öğrenciler</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'onay_bekleyenler' %}">Onay bekleyenler</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'talepler' %}">Ders talepleri</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'ogrenci_ekle' %}">Öğrenci ekle</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'ders_katalogu' %}">Ders kataloğu</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'islem_gecmisi' %}">İşlem geçmişi</a></li>
@@ -28,6 +29,7 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'islem_gecmisi' %}">İşlem geçmişi</a></li>
         {% elif user.ogrenci_mi %}
           <li class="nav-item"><a class="nav-link" href="{% url 'benim' %}">Bilgilerim ve derslerim</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'ders_sec' %}">Ders seçimi</a></li>
         {% endif %}
       </ul>
       <span class="navbar-text me-3 small">{{ user.get_full_name|default:user.username }} · {{ user.get_rol_display }}</span>

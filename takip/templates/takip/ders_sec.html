@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% load takip_etiketleri %}
+{% block baslik %}Ders seçimi{% endblock %}
+{% block icerik %}
+<h1 class="h3 mb-1">Ders seçimi</h1>
+<p class="text-muted">
+  Ders listenizden alacağınız dersleri işaretleyin. Seçimleriniz koordinatör onaylayana kadar
+  <span class="badge bg-warning text-dark">Onay bekliyor</span> olarak görünür ve AKTS hesabına girmez.
+</p>
+
+<form method="post" class="card mb-4">
+  {% csrf_token %}
+  <input type="hidden" name="islem" value="sec">
+  <div class="card-body">
+    {% for hata in secim_formu.non_field_errors %}<div class="alert alert-danger">{{ hata }}</div>{% endfor %}
+
+    <div class="mb-3">
+      <div class="fw-semibold mb-1">Dönem</div>
+      {% for secenek in secim_formu.donem %}
+        <div class="form-check form-check-inline">
+          {{ secenek.tag }}
+          <label class="form-check-label" for="{{ secenek.id_for_label }}">{{ secenek.choice_label }}</label>
+        </div>
+      {% endfor %}
+      {% for hata in secim_formu.donem.errors %}<div class="text-danger small">{{ hata }}</div>{% endfor %}
+    </div>
+
+    {% for hata in secim_formu.kalemler.errors %}<div class="alert alert-danger py-2">{{ hata }}</div>{% endfor %}
+    <div class="table-responsive">
+    <table class="table align-middle mb-3">
+      <thead><tr><th style="width: 2.5rem"></th><th>Yy</th><th>Kod</th><th>Ders</th><th class="text-end">AKTS</th><th>Önceki kayıtlar</th></tr></thead>
+      <tbody>
+      {% for secenek in secim_formu.kalemler %}
+        {% with k=secenek.data.value.instance %}
+        <tr>
+          <td>{{ secenek.tag }}</td>
+          <td>{{ k.yariyil|default:"—" }}</td>
+          <td class="text-nowrap"><label for="{{ secenek.id_for_label }}">{{ k.ders.kod }}</label></td>
+          <td><label for="{{ secenek.id_for_label }}">{{ k.ders.ad }}</label>
+            {% if k.ders.tur == 'SECMELI_HAVUZ' %} <span class="badge bg-light text-dark border">seçmeli havuzu</span>{% endif %}</td>
+          <td class="text-end">{{ k.ders.akts }}</td>
+          <td class="small">
+            {% for den in k.denemeler.all %}
+              <div>{{ den.donem }} · {{ den.get_durum_display }}
+                <span class="badge bg-{{ den.onay_durumu|rozet }}">{{ den.get_onay_durumu_display }}</span></div>
+            {% empty %}<span class="text-muted">—</span>{% endfor %}
+          </td>
+        </tr>
+        {% endwith %}
+      {% empty %}
+        <tr><td colspan="6" class="text-muted">Seçilebilecek ders yok: listenizdeki tüm dersler tamamlanmış.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <button class="btn btn-primary">Seçilen dersleri onaya gönder</button>
+    <a class="btn btn-link" href="{% url 'benim' %}">Ders listeme dön</a>
+  </div>
+</form>
+
+<h2 class="h5">Listenizde olmayan bir ders mi almak istiyorsunuz?</h2>
+<p class="text-muted small">
+  Ders listenize kendiniz ders ekleyemezsiniz. Koordinatöre talep gönderin; kabul edilirse ders listenize eklenir.
+</p>
+<div class="row g-4">
+  <div class="col-lg-5">
+    <form method="post" class="card">
+      {% csrf_token %}
+      <input type="hidden" name="islem" value="talep">
+      <div class="card-body">
+        {% for hata in talep_formu.non_field_errors %}<div class="alert alert-danger">{{ hata }}</div>{% endfor %}
+        {% for alan in talep_formu %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ alan.id_for_label }}">{{ alan.label }}</label>
+            {{ alan }}
+            {% if alan.help_text %}<div class="form-text">{{ alan.help_text }}</div>{% endif %}
+            {% for hata in alan.errors %}<div class="text-danger small">{{ hata }}</div>{% endfor %}
+          </div>
+        {% endfor %}
+        <button class="btn btn-outline-primary">Talep gönder</button>
+      </div>
+    </form>
+  </div>
+  <div class="col-lg-7">
+    <h3 class="h6">Taleplerim</h3>
+    <table class="table table-sm bg-white small">
+      <thead><tr><th>Tarih</th><th>Ders</th><th>Durum</th><th>Yanıt</th></tr></thead>
+      <tbody>
+      {% for t in talepler %}
+        <tr>
+          <td class="text-nowrap">{{ t.olusturulma|date:"d.m.Y" }}</td>
+          <td>{{ t.istenen_metin }}<div class="text-muted">{{ t.aciklama }}</div></td>
+          <td><span class="badge bg-{{ t.durum|rozet }}">{{ t.get_durum_display }}</span></td>
+          <td>{{ t.yanit|default:"—" }}
+            {% if t.eklenen_kalem %}<div class="text-success">Listeye eklendi: {{ t.eklenen_kalem.ders.kod }}</div>{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="text-muted">Henüz talebiniz yok.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

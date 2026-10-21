@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+{% load takip_etiketleri %}
+{% block baslik %}Ders talepleri{% endblock %}
+{% block icerik %}
+<h1 class="h3 mb-1">Ders talepleri</h1>
+<p class="text-muted">
+  Öğrencilerin ders listesinde olmayan dersler için gönderdiği talepler. Kabul edilen ders öğrencinin listesine
+  eklenir. Ders katalogda yoksa önce <a href="{% url 'ders_katalogu' %}">kataloğa ekleyin</a>, sonra burada seçin.
+  Ret için gerekçe zorunludur.
+</p>
+
+<div class="table-responsive">
+<table class="table bg-white align-middle">
+  <thead><tr><th>Öğrenci</th><th>İstenen ders</th><th>Açıklama</th><th>Tarih</th><th>İşlem</th></tr></thead>
+  <tbody>
+  {% for t in bekleyenler %}
+    <tr>
+      <td><a href="{% url 'ogrenci_detay' t.ogrenci.pk %}">{{ t.ogrenci.ogrenci_no }}</a><br><span class="small">{{ t.ogrenci.ad_soyad }} · {{ t.ogrenci.program_turu }}</span></td>
+      <td>{{ t.istenen_metin }}{% if not t.ders %}<br><span class="badge bg-light text-dark border">katalogda yok</span>{% endif %}</td>
+      <td class="small">{{ t.aciklama }}</td>
+      <td class="small text-nowrap">{{ t.olusturulma|date:"d.m.Y H:i" }}</td>
+      <td style="min-width: 20rem">
+        <form method="post" action="{% url 'talep_kabul' t.pk %}" class="mb-2">
+          {% csrf_token %}
+          <div class="input-group input-group-sm mb-1">
+            <select class="form-select" name="ders" required>
+              <option value="">— Listeye eklenecek ders —</option>
+              {% for d in dersler %}<option value="{{ d.pk }}"{% if d.pk == t.ders_id %} selected{% endif %}>{{ d.kod }} {{ d.ad }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="input-group input-group-sm">
+            <input class="form-control" name="yanit" placeholder="Not (isteğe bağlı)">
+            <button class="btn btn-success">Kabul et</button>
+          </div>
+        </form>
+        <form method="post" action="{% url 'talep_reddet' t.pk %}" class="input-group input-group-sm">
+          {% csrf_token %}
+          <input class="form-control" name="gerekce" placeholder="Ret gerekçesi" required>
+          <button class="btn btn-outline-danger">Reddet</button>
+        </form>
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="5" class="text-muted">Bekleyen talep yok.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if yanitlananlar %}
+<h2 class="h6 mt-4">Yanıtlanan talepler (son 50)</h2>
+<table class="table table-sm bg-white small">
+  <thead><tr><th>Öğrenci</th><th>İstenen ders</th><th>Durum</th><th>Yanıt</th><th>Yanıtlayan</th><th>Tarih</th></tr></thead>
+  <tbody>
+  {% for t in yanitlananlar %}
+    <tr><td>{{ t.ogrenci.ogrenci_no }} {{ t.ogrenci.ad_soyad }}</td><td>{{ t.istenen_metin }}</td>
+        <td><span class="badge bg-{{ t.durum|rozet }}">{{ t.get_durum_display }}</span></td>
+        <td>{{ t.yanit|default:"—" }}</td><td>{{ t.yanitlayan.username }}</td><td>{{ t.yanit_tarihi|date:"d.m.Y" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
