@@ -35,6 +35,9 @@
             {% if den.geriye_donuk %}<span class="badge bg-light text-dark border">geriye dönük</span>{% endif %}
             {% if den.red_gerekcesi %}<div class="text-danger">Ret: {{ den.red_gerekcesi }}</div>{% endif %}
             {% if den.iptal_gerekcesi %}<div class="text-muted">İptal: {{ den.iptal_gerekcesi }}</div>{% endif %}
+            {% for n in den.not_girisleri.all %}{% if n.onay_durumu == 'BEKLIYOR' %}
+              <div><span class="badge bg-warning text-dark">Not onay bekliyor</span> {{ n.harf_notu }} · {{ n.get_durum_display }}</div>
+            {% endif %}{% endfor %}
           </div>
         {% empty %}<span class="text-muted">—</span>{% endfor %}
       </td>

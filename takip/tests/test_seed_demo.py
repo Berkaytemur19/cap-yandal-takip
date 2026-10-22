@@ -10,10 +10,11 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hesaplar.models import Kullanici
+from takip import services
 from takip.management.commands.seed_demo import DEMO_SIFRE
 from takip.models import (
-    Belge, BelgeDurumu, DersDenemesi, DersTalebi, IslemKaydi, KuralAyari, Ogrenci, OnayDurumu, Protokol, ProgramTuru,
-    TalepDurumu,
+    Belge, BelgeDurumu, BelgeTuru, DenemeDurumu, DersDenemesi, DersTalebi, IslemKaydi, KuralAyari, NotGirisi,
+    Ogrenci, OnayDurumu, Protokol, ProgramTuru, TalepDurumu,
 )
 
 
@@ -72,10 +73,22 @@ class SeedDemoTest(TestCase):
         self.assertEqual(DersDenemesi.objects.filter(onay_durumu=OnayDurumu.BEKLIYOR).count(), 4)
 
     def test_bekleyen_demo_belgesi(self):
-        belge = Belge.objects.get()
+        belge = Belge.objects.get(tur=BelgeTuru.KAYIT_FORMU)
         self.assertEqual((belge.ogrenci.ogrenci_no, belge.durum), ('24330101', BelgeDurumu.BEKLIYOR))
         self.assertEqual(belge.mime_turu, 'application/pdf')
         self.assertTrue((self.depo_koku / belge.dosya_yolu).is_file())
+
+    def test_not_girisi_senaryolari(self):
+        # Burak: geçen dönemin notu, not belgesiyle birlikte koordinatör onayı bekliyor.
+        giris = NotGirisi.objects.get()
+        self.assertEqual(giris.deneme.liste_kalemi.ogrenci.ogrenci_no, '25330102')
+        self.assertEqual((giris.harf_notu, giris.durum, giris.onay_durumu),
+                         ('CC', DenemeDurumu.GECTI, OnayDurumu.BEKLIYOR))
+        self.assertEqual((giris.transkript.tur, giris.transkript.donem), (BelgeTuru.TRANSKRIPT, giris.deneme.donem))
+        # Zeynep: notu girilebilecek bir dersi var ama o dönemin not belgesi yok.
+        zeynep = Ogrenci.objects.get(ogrenci_no='25330201')
+        [deneme] = services.not_girilebilir_denemeler(zeynep)
+        self.assertIsNone(services.donem_transkripti(zeynep, deneme.donem))
 
     def test_bekleyen_ders_talebi(self):
         talep = DersTalebi.objects.get()

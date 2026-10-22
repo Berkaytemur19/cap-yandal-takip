@@ -172,6 +172,18 @@ OGRENCILER = [
 ]
 
 
+# Dönem sonu not girişi senaryoları. Öğrenci geçen dönem dersi "alındı" olarak girmiş, koordinatör onaylamış.
+# Öğrenciler zaten varsa da (önceki sürümle kurulmuş veritabanı) ayrıca eklenir; kayıt varsa atlanır.
+# transkript: True ise öğrenci o dönemin ÇAP/YDP not belgesini yükleyip notunu onaya göndermiştir.
+NOT_SENARYOLARI = [
+    # Koordinatör "Onay bekleyenler"de notu not belgesiyle karşılaştırıp onaylayabilir.
+    {'ogrenci_no': '25330102', 'donem': (2025, 'BAHAR'), 'kod': '3301354', 'transkript': True,
+     'harf_notu': 'CC', 'durum': DenemeDurumu.GECTI},
+    # Not belgesi yok: öğrenci "Not girişi"nde önce belgeyi yüklemesi gerektiğini görür.
+    {'ogrenci_no': '25330201', 'donem': (2025, 'BAHAR'), 'kod': '3301354', 'transkript': False},
+]
+
+
 class Command(BaseCommand):
     help = 'Demo verisini (sentetik) servis katmanı üzerinden yükler. Tekrar çalıştırılabilir.'
 
@@ -200,6 +212,8 @@ class Command(BaseCommand):
             self._kural_ayarlari(koord)
             for veri in OGRENCILER:
                 self._ogrenci(koord, protokoller, veri)
+            for veri in NOT_SENARYOLARI:
+                self._not_senaryosu(koord, veri)
 
         self.stdout.write(self.style.SUCCESS(
             f"Demo verisi hazır: {self.sayac['eklendi']} kayıt eklendi, {self.sayac['atlandi']} zaten vardı."
@@ -295,3 +309,22 @@ class Command(BaseCommand):
         for tur, dosya_adi in veri.get('belgeler', []):
             icerik = demo_pdf(f'SENTETIK DEMO BELGESI - {veri["ogrenci_no"]} - {tur}')
             services.belge_yukle(ogrenci.kullanici, tur, SimpleUploadedFile(dosya_adi, icerik))
+
+    def _not_senaryosu(self, koord, veri):
+        ogrenci = Ogrenci.objects.get(ogrenci_no=veri['ogrenci_no'])
+        donem = services.donem_bul_veya_ekle(koord, *veri['donem'])
+        kalem = ogrenci.ders_listesi.get(ders__kod=veri['kod'], listede=True)
+        if kalem.denemeler.filter(donem=donem).exists():
+            self._eklendi(False)
+            return
+        self._eklendi(True)
+
+        deneme = services.deneme_ekle(ogrenci.kullanici, kalem, donem, DenemeDurumu.ALINDI)
+        services.deneme_onayla(koord, deneme)
+        if veri['transkript']:
+            yil, tur = veri['donem']
+            icerik = demo_pdf(f'SENTETIK CAP/YDP NOT BELGESI - {ogrenci.ogrenci_no} - {yil} {tur} - '
+                              f'{veri["kod"]} {veri["harf_notu"]}')
+            services.belge_yukle(ogrenci.kullanici, BelgeTuru.TRANSKRIPT,
+                                 SimpleUploadedFile('not_belgesi.pdf', icerik), donem)
+            services.not_gir(ogrenci.kullanici, [(deneme, veri['harf_notu'], veri['durum'])])

@@ -408,7 +408,10 @@ class DersTalebi(SilinmezModel):
 class BelgeTuru(models.TextChoices):
     KAYIT_FORMU = 'KAYIT_FORMU', 'İmzalı kayıt formu'
     DERS_SECIM_FORMU = 'DERS_SECIM_FORMU', 'İmzalı ders seçim formu'
-    TRANSKRIPT = 'TRANSKRIPT', 'Dönem sonu transkripti'
+    # ÇAP Md 7-1 / YDP Md 6-1: program için ayrı not belgesi düzenlenir. Dönem sonu notları
+    # bu belge yüklenmeden onaya gönderilemez.
+    TRANSKRIPT = 'TRANSKRIPT', 'ÇAP/YDP not belgesi (dönem sonu transkripti)'
+    ANA_DAL_TRANSKRIPTI = 'ANA_DAL_TRANSKRIPTI', 'Ana dal transkripti (isteğe bağlı)'
     DIGER = 'DIGER', 'Diğer'
 
 
@@ -459,6 +462,46 @@ class Belge(SilinmezModel):
     def __str__(self):
         donem = f' {self.donem}' if self.donem_id else ''
         return f'{self.ogrenci.ogrenci_no} — {self.get_tur_display()}{donem} (s{self.surum})'
+
+
+# ---------------------------------------------------------------------------
+# Dönem sonu not girişi
+# ---------------------------------------------------------------------------
+
+class NotGirisi(SilinmezModel):
+    """Öğrencinin onaylı 'alındı' kaydı için girdiği dönem sonu notu.
+
+    Onaylı deneme kilitli olduğundan not doğrudan ona yazılmaz; bu ayrı kayıt onay bekler.
+    Koordinatör transkriptle karşılaştırıp onaylayınca deneme Geçti/Kaldı olur. Reddedilen
+    giriş silinmez, gerekçesiyle kalır; öğrenci düzeltip yeniden gönderebilir.
+    """
+
+    deneme = models.ForeignKey(DersDenemesi, on_delete=models.PROTECT, related_name='not_girisleri')
+    harf_notu = models.CharField('harf notu', max_length=2, choices=HarfNotu.choices)
+    # Geçme notu yönetmeliğe tabidir (ÇAP Md 8-a); koda gömülmez. Öğrenci transkriptte yazanı girer.
+    durum = models.CharField(max_length=10, choices=[
+        (DenemeDurumu.GECTI, DenemeDurumu.GECTI.label), (DenemeDurumu.KALDI, DenemeDurumu.KALDI.label),
+    ])
+    transkript = models.ForeignKey(
+        Belge, on_delete=models.PROTECT, related_name='+', verbose_name='gönderildiği transkript',
+    )
+    onay_durumu = models.CharField(
+        'onay durumu', max_length=10, choices=OnayDurumu.choices, default=OnayDurumu.BEKLIYOR,
+    )
+    giren = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    inceleyen = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+', null=True, blank=True,
+    )
+    inceleme_tarihi = models.DateTimeField('inceleme tarihi', null=True, blank=True)
+    red_gerekcesi = models.TextField('ret gerekçesi', blank=True)
+
+    class Meta:
+        verbose_name = 'Not girişi'
+        verbose_name_plural = 'Not girişleri'
+        ordering = ['olusturulma']
+
+    def __str__(self):
+        return f'{self.deneme} → {self.harf_notu} {self.get_durum_display()}'
 
 
 # ---------------------------------------------------------------------------

@@ -35,4 +35,39 @@
   </tbody>
 </table>
 </div>
+
+<h2 class="h4 mt-5 mb-1">Onay bekleyen dönem sonu notları</h2>
+<p class="text-muted">Öğrencinin girdiği notu, gönderirken eklediği ÇAP/YDP not belgesiyle karşılaştırın. Onaylanınca ders Geçti/Kaldı olur ve hesaplara girer.</p>
+<div class="table-responsive">
+<table class="table bg-white align-middle">
+  <thead><tr><th>Öğrenci</th><th>Ders</th><th>Dönem</th><th>Girilen not</th><th>Not belgesi</th><th>İşlem</th></tr></thead>
+  <tbody>
+  {% for n in notlar %}
+    {% with o=n.deneme.liste_kalemi.ogrenci ders=n.deneme.liste_kalemi.ders %}
+    <tr>
+      <td><a href="{% url 'ogrenci_detay' o.pk %}">{{ o.ogrenci_no }}</a><br><span class="small">{{ o.ad_soyad }} · {{ o.program_turu }}</span></td>
+      <td>{{ ders.kod }}<br><span class="small">{{ ders.ad }} ({{ ders.akts }} AKTS)</span></td>
+      <td>{{ n.deneme.donem }}</td>
+      <td class="fw-semibold">{{ n.harf_notu }} · {{ n.get_durum_display }}</td>
+      <td class="small"><a href="{% url 'belge_dosyasi' n.transkript.pk %}" target="_blank" rel="noopener">Belgeyi aç</a>
+        <br>sürüm {{ n.transkript.surum }} · {{ n.transkript.get_durum_display }}</td>
+      <td style="min-width: 18rem">
+        <form method="post" action="{% url 'not_onayla' n.pk %}" class="mb-2">
+          {% csrf_token %}
+          <button class="btn btn-sm btn-success">Onayla</button>
+        </form>
+        <form method="post" action="{% url 'not_reddet' n.pk %}" class="input-group input-group-sm">
+          {% csrf_token %}
+          <input class="form-control" name="gerekce" placeholder="Ret gerekçesi" required>
+          <button class="btn btn-outline-danger">Reddet</button>
+        </form>
+      </td>
+    </tr>
+    {% endwith %}
+  {% empty %}
+    <tr><td colspan="6" class="text-muted">Onay bekleyen not yok.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
 {% endblock %}

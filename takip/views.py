@@ -22,8 +22,8 @@ from .forms import (
     ListeyeDersEkleForm, OgrenciEkleForm, TalepForm,
 )
 from .models import (
-    Belge, BelgeDurumu, Ders, DersDenemesi, DersTalebi, IslemKaydi, KuralAyari, Ogrenci, OgrenciDers,
-    OnayDurumu, ProgramTuru, TalepDurumu,
+    Belge, BelgeDurumu, BelgeTuru, Ders, DersDenemesi, DersTalebi, HarfNotu, IslemKaydi, KuralAyari,
+    NotGirisi, Ogrenci, OgrenciDers, OnayDurumu, ProgramTuru, TalepDurumu,
 )
 
 KOORD = Rol.KOORDINATOR
@@ -48,7 +48,8 @@ def ana_sayfa(request):
         cap=Count('pk', filter=Q(program_turu=ProgramTuru.CAP, kayit_durumu='AKTIF')),
         ydp=Count('pk', filter=Q(program_turu=ProgramTuru.YDP, kayit_durumu='AKTIF')),
     )
-    sayilar['bekleyen'] = DersDenemesi.objects.filter(onay_durumu=OnayDurumu.BEKLIYOR).count()
+    sayilar['bekleyen'] = (DersDenemesi.objects.filter(onay_durumu=OnayDurumu.BEKLIYOR).count()
+                           + NotGirisi.objects.filter(onay_durumu=OnayDurumu.BEKLIYOR).count())
     sayilar['aktif_ders'] = Ders.objects.filter(aktif=True).count()
     sayilar['talep'] = DersTalebi.objects.filter(durum=TalepDurumu.BEKLIYOR).count()
     sayilar['belge'] = Belge.objects.filter(durum=BelgeDurumu.BEKLIYOR).count()
@@ -79,7 +80,7 @@ def ogrenci_listesi(request):
 def _ders_listesi_baglami(ogrenci):
     kalemler = list(
         ogrenci.ders_listesi.select_related('ders', 'cikaran')
-        .prefetch_related('denemeler__donem')
+        .prefetch_related('denemeler__donem', 'denemeler__not_girisleri')
         .order_by('yariyil', 'ders__kod')
     )
     return {
@@ -227,6 +228,83 @@ def listeden_cikar(request, pk):
 
 
 # ---------------------------------------------------------------------------
+# Dönem sonu not girişi (öğrenci) ve not onayı (koordinatör)
+# ---------------------------------------------------------------------------
+
+@rol_gerekli(OGRENCI)
+def not_girisi(request):
+    """Öğrenci, onaylı 'alındı' derslerinin notunu dönem dönem girer.
+
+    Her dönem ayrı formdur; dönemin ÇAP/YDP not belgesi yüklenmemişse gönderilemez.
+    Alan adları: harf_<deneme no>, durum_<deneme no>. Boş bırakılan satır gönderilmez.
+    """
+    try:
+        ogrenci = request.user.ogrenci
+    except Ogrenci.DoesNotExist:
+        raise Http404('Bu hesaba bağlı öğrenci kaydı yok.')
+
+    gruplar = {}
+    for deneme in services.not_girilebilir_denemeler(ogrenci):
+        gruplar.setdefault(deneme.donem, []).append(deneme)
+
+    if request.method == 'POST':
+        donem_id = request.POST.get('donem')
+        denemeler = next((g for d, g in gruplar.items() if str(d.pk) == donem_id), [])
+        girisler, eksik = [], []
+        for d in denemeler:
+            harf, durum = request.POST.get(f'harf_{d.pk}', ''), request.POST.get(f'durum_{d.pk}', '')
+            if harf and durum:
+                girisler.append((d, harf, durum))
+            elif harf or durum:
+                eksik.append(d.liste_kalemi.ders.kod)
+        try:
+            if eksik:
+                raise services.IslemHatasi(f'{", ".join(eksik)}: harf notu ve Geçti/Kaldı birlikte seçilmelidir.')
+            kayitlar = services.not_gir(request.user, girisler)
+        except services.IslemHatasi as hata:
+            messages.error(request, str(hata))
+        else:
+            messages.success(request, f'{len(kayitlar)} dersin notu onaya gönderildi.')
+        return redirect('not_girisi')
+
+    donemler = [{
+        'donem': donem, 'denemeler': denemeler, 'transkript': services.donem_transkripti(ogrenci, donem),
+    } for donem, denemeler in gruplar.items()]
+    gecmis = (NotGirisi.objects.filter(deneme__liste_kalemi__ogrenci=ogrenci)
+              .select_related('deneme__donem', 'deneme__liste_kalemi__ders').order_by('-olusturulma'))
+    return render(request, 'takip/not_girisi.html', {
+        'donemler': donemler, 'gecmis': gecmis, 'harf_notlari': HarfNotu.choices,
+        'transkript_turu': BelgeTuru.TRANSKRIPT,
+    })
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def not_onayla(request, pk):
+    giris = get_object_or_404(NotGirisi, pk=pk)
+    try:
+        services.not_onayla(request.user, giris)
+    except services.IslemHatasi as hata:
+        messages.error(request, str(hata))
+    else:
+        messages.success(request, f'{giris.deneme.liste_kalemi}: {giris.harf_notu} onaylandı.')
+    return redirect('onay_bekleyenler')
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def not_reddet(request, pk):
+    giris = get_object_or_404(NotGirisi, pk=pk)
+    try:
+        services.not_reddet(request.user, giris, request.POST.get('gerekce', '').strip())
+    except services.IslemHatasi as hata:
+        messages.error(request, str(hata))
+    else:
+        messages.success(request, f'{giris.deneme.liste_kalemi}: not girişi reddedildi.')
+    return redirect('onay_bekleyenler')
+
+
+# ---------------------------------------------------------------------------
 # Kural ayarları (koordinatör değiştirir, bölüm başkanı görür)
 # ---------------------------------------------------------------------------
 
@@ -364,7 +442,12 @@ def onay_bekleyenler(request):
         .select_related('liste_kalemi__ogrenci', 'liste_kalemi__ders', 'donem', 'giren')
         .order_by('olusturulma')
     )
-    return render(request, 'takip/onay_bekleyenler.html', {'denemeler': denemeler})
+    notlar = (
+        NotGirisi.objects.filter(onay_durumu=OnayDurumu.BEKLIYOR)
+        .select_related('deneme__liste_kalemi__ogrenci', 'deneme__liste_kalemi__ders', 'deneme__donem', 'transkript')
+        .order_by('olusturulma')
+    )
+    return render(request, 'takip/onay_bekleyenler.html', {'denemeler': denemeler, 'notlar': notlar})
 
 
 @require_POST
@@ -492,8 +575,10 @@ def belgelerim(request):
     except Ogrenci.DoesNotExist:
         raise Http404('Bu hesaba bağlı öğrenci kaydı yok.')
 
+    # Not girişi sayfasındaki "transkript yükle" bağlantısı türü ve dönemi önceden seçer.
     form = BelgeYukleForm(request.POST or None, request.FILES or None,
-                          donemler=services.belge_donemleri(ogrenci))
+                          donemler=services.belge_donemleri(ogrenci),
+                          initial={'tur': request.GET.get('tur'), 'donem': request.GET.get('donem')})
     if request.method == 'POST' and form.is_valid():
         v = form.cleaned_data
         try:

@@ -24,8 +24,8 @@ from hesaplar.models import Rol
 
 from .models import (
     DONEMLI_BELGE_TURLERI, AkademikDonem, AnaDalGanoKaydi, Belge, BelgeDurumu, BelgeTuru,
-    DenemeDurumu, Ders, DersDenemesi, DersTalebi, DersTuru, DonemTuru, IslemKaydi, KayitDurumu,
-    KuralAyari, Ogrenci, OgrenciDers, OnayDurumu, Protokol, ProtokolDersi, TalepDurumu,
+    DenemeDurumu, Ders, DersDenemesi, DersTalebi, DersTuru, DonemTuru, HarfNotu, IslemKaydi, KayitDurumu,
+    KuralAyari, NotGirisi, Ogrenci, OgrenciDers, OnayDurumu, Protokol, ProtokolDersi, TalepDurumu,
 )
 
 
@@ -620,6 +620,120 @@ def belge_reddet(kullanici, belge, gerekce):
     islem_kaydet(kullanici, 'belge_reddet', belge, eski=eski,
                  yeni=_deger(belge, ['durum']), aciklama=belge.red_gerekcesi)
     return belge
+
+
+# ---------------------------------------------------------------------------
+# Dönem sonu not girişi
+# ---------------------------------------------------------------------------
+
+NOT_ALANLARI = ['harf_notu', 'durum', 'transkript_id', 'onay_durumu']
+
+
+def _donem_sirasi(yil, tur):
+    return yil, [DonemTuru.GUZ, DonemTuru.BAHAR, DonemTuru.YAZ].index(tur)
+
+
+def not_girilebilir_denemeler(ogrenci, tarih=None):
+    """Öğrencinin not girebileceği kayıtlar: koordinatörün onayladığı 'alındı' denemeleri,
+    içinde bulunulan veya geçmiş bir dönemde, listede olan, onay bekleyen not girişi olmayan."""
+    simdi = _donem_sirasi(*donem_tarihten(tarih or timezone.localdate()))
+    denemeler = (
+        DersDenemesi.objects
+        .filter(liste_kalemi__ogrenci=ogrenci, liste_kalemi__listede=True,
+                onay_durumu=OnayDurumu.ONAYLANDI, durum=DenemeDurumu.ALINDI)
+        .exclude(not_girisleri__onay_durumu=OnayDurumu.BEKLIYOR)
+        .select_related('donem', 'liste_kalemi__ders')
+        .prefetch_related('not_girisleri')
+        .order_by('donem__baslangic_yili', 'donem__donem', 'liste_kalemi__ders__kod')
+    )
+    return [d for d in denemeler if d.donem.sira <= simdi]
+
+
+def donem_transkripti(ogrenci, donem):
+    """Dönemin geçerli ÇAP/YDP not belgesi: en son sürüm, reddedilmemişse. Yoksa None.
+
+    Hoca: 'yüklenmeden notlar onaya gönderilemez' — onaylanmış olması gerekmez,
+    koordinatör notlarla birlikte inceler.
+    """
+    son = ogrenci.belgeler.filter(tur=BelgeTuru.TRANSKRIPT, donem=donem).order_by('-surum').first()
+    return son if son and son.durum != BelgeDurumu.REDDEDILDI else None
+
+
+@transaction.atomic
+def not_gir(kullanici, girisler, tarih=None):
+    """Öğrenci dönem sonu notlarını onaya gönderir. girisler: [(deneme, harf_notu, durum), ...].
+
+    Her dönemin ÇAP/YDP not belgesi (transkript) yüklenmiş olmalıdır.
+    """
+    ogrenci = _ogrenci_kaydi(kullanici)
+    if not girisler:
+        raise IslemHatasi('En az bir dersin notunu girmelisiniz.')
+    uygun = {d.pk for d in not_girilebilir_denemeler(ogrenci, tarih)}
+    kayitlar = []
+    for deneme, harf_notu, durum in girisler:
+        if deneme.liste_kalemi.ogrenci_id != ogrenci.pk:
+            raise PermissionDenied
+        kod = deneme.liste_kalemi.ders.kod
+        if deneme.pk not in uygun:
+            raise IslemHatasi(f'{kod}: bu kayda not girilemez (onaylı “alındı” kaydı değil '
+                              f'veya notu zaten onay bekliyor).')
+        if harf_notu not in HarfNotu.values or durum not in (DenemeDurumu.GECTI, DenemeDurumu.KALDI):
+            raise IslemHatasi(f'{kod}: harf notu ve Geçti/Kaldı durumu seçilmelidir.')
+        transkript = donem_transkripti(ogrenci, deneme.donem)
+        if transkript is None:
+            raise IslemHatasi(f'{deneme.donem} dönemi için ÇAP/YDP not belgesi (transkript) yüklenmeden '
+                              f'notlar onaya gönderilemez.')
+        giris = NotGirisi.objects.create(
+            deneme=deneme, harf_notu=harf_notu, durum=durum, transkript=transkript, giren=kullanici,
+        )
+        islem_kaydet(kullanici, 'not_gir', giris, yeni=_deger(giris, NOT_ALANLARI))
+        kayitlar.append(giris)
+    return kayitlar
+
+
+def _not_bekliyor_olmali(giris):
+    if giris.onay_durumu != OnayDurumu.BEKLIYOR:
+        raise IslemHatasi('Yalnızca onay bekleyen not girişi incelenebilir.')
+
+
+@transaction.atomic
+def not_onayla(kullanici, giris):
+    """Not onaylanınca deneme Geçti/Kaldı olur ve hesaplara girer. Deneme yine kilitli kalır."""
+    _koordinator_olmali(kullanici)
+    _not_bekliyor_olmali(giris)
+    deneme = giris.deneme
+    if deneme.onay_durumu != OnayDurumu.ONAYLANDI or deneme.durum != DenemeDurumu.ALINDI:
+        raise IslemHatasi('Ders kaydı bu arada değişmiş (iptal veya düzeltme); not onaylanamaz. Reddedin.')
+
+    eski_deneme = _deger(deneme, DENEME_ALANLARI)
+    deneme.durum, deneme.harf_notu = giris.durum, giris.harf_notu
+    deneme._kilit_acik = True
+    deneme.save()
+
+    giris.onay_durumu = OnayDurumu.ONAYLANDI
+    giris.inceleyen = kullanici
+    giris.inceleme_tarihi = timezone.now()
+    giris.save()
+    islem_kaydet(kullanici, 'not_onayla', giris, eski={'onay_durumu': OnayDurumu.BEKLIYOR},
+                 yeni={'onay_durumu': OnayDurumu.ONAYLANDI})
+    islem_kaydet(kullanici, 'deneme_not_isle', deneme, eski=eski_deneme, yeni=_deger(deneme, DENEME_ALANLARI),
+                 aciklama=f'Not girişi #{giris.pk} onaylandı')
+    return giris
+
+
+@transaction.atomic
+def not_reddet(kullanici, giris, gerekce):
+    _koordinator_olmali(kullanici)
+    _gerekce_olmali(gerekce)
+    _not_bekliyor_olmali(giris)
+    giris.onay_durumu = OnayDurumu.REDDEDILDI
+    giris.red_gerekcesi = gerekce.strip()
+    giris.inceleyen = kullanici
+    giris.inceleme_tarihi = timezone.now()
+    giris.save()
+    islem_kaydet(kullanici, 'not_reddet', giris, eski={'onay_durumu': OnayDurumu.BEKLIYOR},
+                 yeni={'onay_durumu': OnayDurumu.REDDEDILDI}, aciklama=giris.red_gerekcesi)
+    return giris
 
 
 # ---------------------------------------------------------------------------
