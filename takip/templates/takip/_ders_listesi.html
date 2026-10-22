@@ -17,7 +17,7 @@
 
 <div class="table-responsive">
 <table class="table bg-white align-middle">
-  <thead><tr><th>Yy</th><th>Kod</th><th>Ders</th><th class="text-end">AKTS</th><th>Durum</th><th>Denemeler (dönem · not · durum · onay)</th></tr></thead>
+  <thead><tr><th>Yy</th><th>Kod</th><th>Ders</th><th class="text-end">AKTS</th><th>Durum</th><th>Denemeler (dönem · not · durum · onay)</th>{% if user.koordinator_mu %}<th></th>{% endif %}</tr></thead>
   <tbody>
   {% for k in kalemler %}
     {% with d=k.ozet_durum %}
@@ -34,13 +34,15 @@
             <span class="badge bg-{{ den.onay_durumu|rozet }}">{{ den.get_onay_durumu_display }}</span>
             {% if den.geriye_donuk %}<span class="badge bg-light text-dark border">geriye dönük</span>{% endif %}
             {% if den.red_gerekcesi %}<div class="text-danger">Ret: {{ den.red_gerekcesi }}</div>{% endif %}
+            {% if den.iptal_gerekcesi %}<div class="text-muted">İptal: {{ den.iptal_gerekcesi }}</div>{% endif %}
           </div>
         {% empty %}<span class="text-muted">—</span>{% endfor %}
       </td>
+      {% if user.koordinator_mu %}<td><a class="btn btn-sm btn-outline-primary" href="{% url 'kalem_detay' k.pk %}">Yönet</a></td>{% endif %}
     </tr>
     {% endwith %}
   {% empty %}
-    <tr><td colspan="6" class="text-muted">Ders listesi boş.</td></tr>
+    <tr><td colspan="7" class="text-muted">Ders listesi boş.</td></tr>
   {% endfor %}
   </tbody>
 </table>

@@ -18,9 +18,25 @@
   {% endfor %}
   </tbody>
 </table>
+{% if gano_form %}
+<div class="card mb-4"><div class="card-body">
+  <h3 class="h6">GANO gir</h3>
+  {% url 'gano_gir' ogrenci.pk as gano_url %}
+  {% include 'takip/_satir_formu.html' with form=gano_form action=gano_url dugme='GANO ekle' %}
+</div></div>
+{% endif %}
 
 <h2 class="h5">Ders listesi</h2>
 {% include 'takip/_ders_listesi.html' %}
+{% if liste_form %}
+<div class="card mb-4"><div class="card-body">
+  <h3 class="h6">Listeye ders ekle</h3>
+  <p class="small text-muted mb-2">Ders kataloğundan seçilir. Gerekçe ve tarih işlem geçmişine yazılır; geçilmiş derslere dokunulmaz.
+    Listeden çıkarmak, kayıt girmek, düzeltmek veya iptal etmek için dersin yanındaki <strong>Yönet</strong> düğmesini kullanın.</p>
+  {% url 'listeye_ders_ekle' ogrenci.pk as liste_url %}
+  {% include 'takip/_satir_formu.html' with form=liste_form action=liste_url dugme='Ekle' %}
+</div></div>
+{% endif %}
 
 <h2 class="h5 mt-4">Belgeler</h2>
 {% include 'takip/_belge_tablosu.html' %}

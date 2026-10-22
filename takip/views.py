@@ -6,6 +6,7 @@ Veriyi değiştiren view'lar işi services modülüne bırakır; burada doğruda
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Count, Q
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404
@@ -16,10 +17,13 @@ from hesaplar.models import Rol
 from hesaplar.yetki import rol_gerekli
 
 from . import services
-from .forms import BelgeYukleForm, DersForm, DersSecForm, OgrenciEkleForm, TalepForm
+from .forms import (
+    BelgeYukleForm, DenemeDuzeltForm, DenemeForm, DersForm, DersSecForm, GanoForm, KuralAyariForm,
+    ListeyeDersEkleForm, OgrenciEkleForm, TalepForm,
+)
 from .models import (
-    Belge, BelgeDurumu, Ders, DersDenemesi, DersTalebi, IslemKaydi, Ogrenci, OnayDurumu, ProgramTuru,
-    TalepDurumu,
+    Belge, BelgeDurumu, Ders, DersDenemesi, DersTalebi, IslemKaydi, KuralAyari, Ogrenci, OgrenciDers,
+    OnayDurumu, ProgramTuru, TalepDurumu,
 )
 
 KOORD = Rol.KOORDINATOR
@@ -87,12 +91,174 @@ def _ders_listesi_baglami(ogrenci):
     }
 
 
+def _ogrenci_detay_sayfasi(request, ogrenci, **formlar):
+    """Öğrenci kartı. Koordinatöre işlem formları da gösterilir; hatalı form geri gönderilirse onu kullanır."""
+    baglam = _ders_listesi_baglami(ogrenci)
+    baglam['belgeler'] = ogrenci.belgeler.select_related('donem')
+    if request.user.rol == KOORD:
+        baglam['gano_form'] = formlar.get('gano_form') or GanoForm()
+        baglam['liste_form'] = formlar.get('liste_form') or ListeyeDersEkleForm()
+    return render(request, 'takip/ogrenci_detay.html', baglam, status=400 if formlar else 200)
+
+
 @rol_gerekli(KOORD, BASKAN)
 def ogrenci_detay(request, pk):
     ogrenci = get_object_or_404(Ogrenci.objects.select_related('kabul_donemi', 'protokol'), pk=pk)
-    baglam = _ders_listesi_baglami(ogrenci)
-    baglam['belgeler'] = ogrenci.belgeler.select_related('donem')
-    return render(request, 'takip/ogrenci_detay.html', baglam)
+    return _ogrenci_detay_sayfasi(request, ogrenci)
+
+
+def _form_hatalari(form):
+    """Satır içi formların hatalarını tek mesaja çevirir (sayfa yönlendirmeyle yeniden açılır)."""
+    return ' '.join(f'{form.fields[a].label if a in form.fields else ""}: {h}'.lstrip(': ')
+                    for a, hatalar in form.errors.items() for h in hatalar)
+
+
+# ---------------------------------------------------------------------------
+# Koordinatörün öğrenci kartındaki işlemleri
+# ---------------------------------------------------------------------------
+
+@require_POST
+@rol_gerekli(KOORD)
+def gano_gir(request, pk):
+    ogrenci = get_object_or_404(Ogrenci, pk=pk)
+    form = GanoForm(request.POST)
+    if form.is_valid():
+        v = form.cleaned_data
+        try:
+            with transaction.atomic():
+                donem = services.donem_bul_veya_ekle(request.user, v['yil'], v['donem_turu'])
+                services.ana_dal_gano_gir(request.user, ogrenci, donem, v['gano'], v['kaynak'])
+        except services.IslemHatasi as hata:
+            form.add_error(None, str(hata))
+        else:
+            messages.success(request, f'{donem} GANO kaydı eklendi.')
+            return redirect('ogrenci_detay', pk=ogrenci.pk)
+    return _ogrenci_detay_sayfasi(request, ogrenci, gano_form=form)
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def listeye_ders_ekle(request, pk):
+    ogrenci = get_object_or_404(Ogrenci, pk=pk)
+    form = ListeyeDersEkleForm(request.POST)
+    if form.is_valid():
+        v = form.cleaned_data
+        try:
+            services.listeye_ders_ekle(request.user, ogrenci, v['ders'], v['gerekce'].strip(), v['yariyil'])
+        except services.IslemHatasi as hata:
+            form.add_error(None, str(hata))
+        else:
+            messages.success(request, f'{v["ders"]} ders listesine eklendi.')
+            return redirect('ogrenci_detay', pk=ogrenci.pk)
+    return _ogrenci_detay_sayfasi(request, ogrenci, liste_form=form)
+
+
+@rol_gerekli(KOORD)
+def kalem_detay(request, pk):
+    """Öğrencinin listesindeki bir ders: denemeleri, yeni deneme girişi, düzeltme ve iptal."""
+    kalem = get_object_or_404(OgrenciDers.objects.select_related('ogrenci', 'ders'), pk=pk)
+    form = DenemeForm(request.POST or None)
+    if request.method == 'POST' and form.is_valid():
+        v = form.cleaned_data
+        try:
+            with transaction.atomic():
+                donem = services.donem_bul_veya_ekle(request.user, v['yil'], v['donem_turu'])
+                services.deneme_ekle(request.user, kalem, donem, v['durum'], v['harf_notu'], v['geriye_donuk'])
+        except services.IslemHatasi as hata:
+            form.add_error(None, str(hata))
+        else:
+            messages.success(request, f'{donem} kaydı eklendi.')
+            return redirect('kalem_detay', pk=kalem.pk)
+
+    denemeler = kalem.denemeler.select_related('donem', 'giren', 'onaylayan')
+    satirlar = [(d, DenemeDuzeltForm(prefix=f'd{d.pk}', initial={
+        'yil': d.donem.baslangic_yili, 'donem_turu': d.donem.donem, 'durum': d.durum, 'harf_notu': d.harf_notu,
+    })) for d in denemeler]
+    return render(request, 'takip/kalem_detay.html', {
+        'kalem': kalem, 'ogrenci': kalem.ogrenci, 'form': form, 'satirlar': satirlar,
+    }, status=400 if form.errors else 200)
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def deneme_duzelt(request, pk):
+    deneme = get_object_or_404(DersDenemesi, pk=pk)
+    form = DenemeDuzeltForm(request.POST, prefix=f'd{deneme.pk}')
+    if not form.is_valid():
+        messages.error(request, _form_hatalari(form))
+        return redirect('kalem_detay', pk=deneme.liste_kalemi_id)
+    v = form.cleaned_data
+    try:
+        with transaction.atomic():
+            donem = services.donem_bul_veya_ekle(request.user, v['yil'], v['donem_turu'])
+            services.deneme_duzelt(request.user, deneme, v['gerekce'].strip(),
+                                   donem=donem, durum=v['durum'], harf_notu=v['harf_notu'])
+    except services.IslemHatasi as hata:
+        messages.error(request, str(hata))
+    else:
+        messages.success(request, 'Kayıt düzeltildi; eski ve yeni değer işlem geçmişine yazıldı.')
+    return redirect('kalem_detay', pk=deneme.liste_kalemi_id)
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def deneme_iptal(request, pk):
+    deneme = get_object_or_404(DersDenemesi, pk=pk)
+    try:
+        services.deneme_iptal(request.user, deneme, request.POST.get('gerekce', '').strip())
+    except services.IslemHatasi as hata:
+        messages.error(request, str(hata))
+    else:
+        messages.success(request, 'Kayıt iptal edildi (silinmedi, iptal durumuyla kalır).')
+    return redirect('kalem_detay', pk=deneme.liste_kalemi_id)
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def listeden_cikar(request, pk):
+    kalem = get_object_or_404(OgrenciDers, pk=pk)
+    try:
+        services.listeden_ders_cikar(request.user, kalem, request.POST.get('gerekce', '').strip())
+    except services.IslemHatasi as hata:
+        messages.error(request, str(hata))
+        return redirect('kalem_detay', pk=kalem.pk)
+    messages.success(request, f'{kalem.ders} ders listesinden çıkarıldı.')
+    return redirect('ogrenci_detay', pk=kalem.ogrenci_id)
+
+
+# ---------------------------------------------------------------------------
+# Kural ayarları (koordinatör değiştirir, bölüm başkanı görür)
+# ---------------------------------------------------------------------------
+
+@rol_gerekli(KOORD, BASKAN)
+def kural_ayarlari(request):
+    """Her kuralın güncel değeri ve eski sürümleri. Eski sürümler hiç değişmez."""
+    gruplar = {}
+    for ayar in KuralAyari.objects.select_related('olusturan'):  # program, anahtar, -sürüm sıralı
+        gruplar.setdefault(ayar.anahtar, []).append(ayar)
+    kurallar = [{'guncel': s[0], 'eskiler': s[1:], 'form': KuralAyariForm(prefix=s[0].anahtar)}
+                for s in gruplar.values()]
+    return render(request, 'takip/kural_ayarlari.html', {'kurallar': kurallar})
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def kural_guncelle(request, anahtar):
+    guncel = KuralAyari.guncel(anahtar)
+    if guncel is None:
+        raise Http404('Böyle bir kural yok.')
+    form = KuralAyariForm(request.POST, prefix=anahtar)
+    if not form.is_valid():
+        messages.error(request, _form_hatalari(form))
+        return redirect('kural_ayarlari')
+    ayar = services.kural_ayari_belirle(
+        request.user, anahtar, guncel.program_turu, form.cleaned_data['deger'], guncel.aciklama, guncel.madde,
+    )
+    if ayar.pk == guncel.pk:
+        messages.info(request, 'Değer aynı; yeni sürüm oluşturulmadı.')
+    else:
+        messages.success(request, f'{anahtar} = {ayar.deger} (sürüm {ayar.surum}). Eski sürüm korunuyor.')
+    return redirect('kural_ayarlari')
 
 
 @rol_gerekli(KOORD)

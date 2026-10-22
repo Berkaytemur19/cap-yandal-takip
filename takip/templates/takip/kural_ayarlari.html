@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block baslik %}Kural ayarları{% endblock %}
+{% block icerik %}
+<h1 class="h3">Kural ayarları</h1>
+<p class="text-muted small">Yönergedeki sayısal eşikler koda gömülü değildir, buradan gelir. Değer değiştirildiğinde eski satır güncellenmez,
+  <strong>yeni sürüm</strong> eklenir; eski sürümler ve geçmişte yapılmış kontroller olduğu gibi kalır.</p>
+{% if user.bolum_baskani_mi %}<div class="alert alert-info py-2 small">Salt okunur görünüm.</div>{% endif %}
+
+<div class="table-responsive">
+<table class="table bg-white align-middle">
+  <thead><tr><th>Program</th><th>Kural</th><th>Madde</th><th class="text-end">Güncel değer</th><th>Sürüm</th>{% if user.koordinator_mu %}<th>Yeni değer</th>{% endif %}</tr></thead>
+  <tbody>
+  {% for k in kurallar %}
+    {% with g=k.guncel %}
+    <tr>
+      <td>{{ g.program_turu }}</td>
+      <td>{{ g.aciklama }}<div class="small text-muted"><code>{{ g.anahtar }}</code></div>
+        {% if k.eskiler %}
+        <details class="small mt-1"><summary>Eski sürümler ({{ k.eskiler|length }})</summary>
+          <ul class="mb-0">
+          {% for e in k.eskiler %}<li>s{{ e.surum }}: {{ e.deger }} — {{ e.olusturan.username }}, {{ e.olusturulma|date:"d.m.Y H:i" }}</li>{% endfor %}
+          </ul>
+        </details>
+        {% endif %}
+      </td>
+      <td>{{ g.madde }}</td>
+      <td class="text-end fw-semibold">{{ g.deger }}</td>
+      <td class="small">s{{ g.surum }}<br>{{ g.olusturulma|date:"d.m.Y" }}</td>
+      {% if user.koordinator_mu %}
+      <td style="min-width: 12rem">
+        <form method="post" action="{% url 'kural_guncelle' g.anahtar %}" class="input-group input-group-sm">
+          {% csrf_token %}
+          <input type="number" step="0.01" name="{{ k.form.deger.html_name }}" class="form-control" placeholder="{{ g.deger }}" required>
+          <button class="btn btn-outline-primary">Kaydet</button>
+        </form>
+      </td>
+      {% endif %}
+    </tr>
+    {% endwith %}
+  {% empty %}
+    <tr><td colspan="6" class="text-muted">Kural ayarı yok.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

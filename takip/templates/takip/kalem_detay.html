@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% load takip_etiketleri %}
+{% block baslik %}{{ kalem.ders.kod }} · {{ ogrenci.ogrenci_no }}{% endblock %}
+{% block icerik %}
+<a href="{% url 'ogrenci_detay' ogrenci.pk %}" class="small">&larr; {{ ogrenci.ad_soyad }} ({{ ogrenci.ogrenci_no }})</a>
+<h1 class="h3 mt-2">{{ kalem.ders.kod }} {{ kalem.ders.ad }} <small class="text-muted">{{ kalem.ders.akts }} AKTS</small></h1>
+<p class="small text-muted">
+  Önerilen yarıyıl: {{ kalem.yariyil|default:"—" }} · Listeye ekleme gerekçesi: {{ kalem.ekleme_gerekcesi|default:"—" }}
+  {% if not kalem.listede %}<br><span class="badge bg-dark">Listeden çıkarıldı</span> {{ kalem.cikarma_gerekcesi }} ({{ kalem.cikarilma_tarihi|date:"d.m.Y" }}){% endif %}
+</p>
+
+<h2 class="h5">Kayıtlar (denemeler)</h2>
+<p class="small text-muted">Onaylı kayıt kilitlidir; yalnızca buradan gerekçeyle düzeltilir veya iptal edilir. Eski ve yeni değer işlem geçmişine yazılır. Hiçbir kayıt silinmez.</p>
+<div class="table-responsive">
+<table class="table bg-white align-middle">
+  <thead><tr><th>Dönem</th><th>Durum</th><th>Not</th><th>Onay</th><th>Giren</th><th>İşlem</th></tr></thead>
+  <tbody>
+  {% for d, duzelt_form in satirlar %}
+    <tr>
+      <td>{{ d.donem }}{% if d.geriye_donuk %} <span class="badge bg-light text-dark border">geriye dönük</span>{% endif %}</td>
+      <td>{{ d.get_durum_display }}</td>
+      <td>{{ d.harf_notu|default:"—" }}</td>
+      <td><span class="badge bg-{{ d.onay_durumu|rozet }}">{{ d.get_onay_durumu_display }}</span>
+        {% if d.red_gerekcesi %}<div class="small text-danger">Ret: {{ d.red_gerekcesi }}</div>{% endif %}
+        {% if d.iptal_gerekcesi %}<div class="small text-muted">İptal: {{ d.iptal_gerekcesi }}</div>{% endif %}</td>
+      <td class="small">{{ d.giren.username }}<br>{{ d.olusturulma|date:"d.m.Y H:i" }}</td>
+      <td style="min-width: 10rem">
+        {% if d.onay_durumu != 'IPTAL' %}
+        <details>
+          <summary class="btn btn-sm btn-outline-primary">Düzelt / iptal</summary>
+          <div class="border rounded p-2 mt-2 bg-light">
+            {% url 'deneme_duzelt' d.pk as duzelt_url %}
+            {% include 'takip/_satir_formu.html' with form=duzelt_form action=duzelt_url dugme='Düzelt' %}
+            <form method="post" action="{% url 'deneme_iptal' d.pk %}" class="input-group input-group-sm mt-2">
+              {% csrf_token %}
+              <input class="form-control" name="gerekce" placeholder="İptal gerekçesi" required>
+              <button class="btn btn-outline-danger">İptal et</button>
+            </form>
+          </div>
+        </details>
+        {% endif %}
+      </td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="6" class="text-muted">Bu ders için kayıt yok.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% if kalem.listede %}
+<div class="card mb-4"><div class="card-body">
+  <h2 class="h6">Yeni kayıt gir</h2>
+  <p class="small text-muted mb-2">Koordinatörün girdiği kayıt doğrudan onaylıdır. Sistem açılmadan önce alınmış dersler için “geriye dönük” işaretleyin.</p>
+  {% url 'kalem_detay' kalem.pk as ekle_url %}
+  {% include 'takip/_satir_formu.html' with form=form action=ekle_url dugme='Kaydet' %}
+</div></div>
+
+<div class="card border-danger mb-4"><div class="card-body">
+  <h2 class="h6">Ders listesinden çıkar</h2>
+  <p class="small text-muted mb-2">Kayıt silinmez; gerekçe ve tarihle “çıkarılan dersler” bölümüne taşınır. Geçilmiş veya muaf olunmuş ders çıkarılamaz.</p>
+  <form method="post" action="{% url 'listeden_cikar' kalem.pk %}" class="input-group">
+    {% csrf_token %}
+    <input class="form-control" name="gerekce" placeholder="Çıkarma gerekçesi" required>
+    <button class="btn btn-outline-danger">Listeden çıkar</button>
+  </form>
+</div></div>
+{% endif %}
+{% endblock %}

@@ -2,8 +2,8 @@ from django import forms
 from django.core.validators import RegexValidator
 
 from .models import (
-    DONEMLI_BELGE_TURLERI, AkademikDonem, BelgeTuru, DenemeDurumu, Ders, DersDenemesi, DersTuru, DonemTuru, OgrenciDers, OnayDurumu,
-    ProgramTuru, Protokol,
+    DONEMLI_BELGE_TURLERI, AkademikDonem, BelgeTuru, DenemeDurumu, Ders, DersDenemesi, DersTuru, DonemTuru, HarfNotu,
+    OgrenciDers, OnayDurumu, ProgramTuru, Protokol,
 )
 
 
@@ -142,3 +142,52 @@ class BelgeYukleForm(BootstrapMixin, forms.Form):
         if veri.get('tur') in DONEMLI_BELGE_TURLERI and not veri.get('donem'):
             self.add_error('donem', 'Bu belge türü için dönem seçilmesi zorunludur.')
         return veri
+
+
+# ---------------------------------------------------------------------------
+# Koordinatörün öğrenci kartındaki işlemleri
+# ---------------------------------------------------------------------------
+
+class DonemAlanlariMixin(forms.Form):
+    """Akademik dönemi yıl + dönem türü olarak alır; view donem_bul_veya_ekle ile kaydı bulur."""
+
+    yil = forms.IntegerField(label='Yıl', min_value=2000, max_value=2100, help_text='2025-2026 için 2025')
+    donem_turu = forms.ChoiceField(label='Dönem', choices=DonemTuru.choices)
+
+
+class GanoForm(BootstrapMixin, DonemAlanlariMixin):
+    gano = forms.DecimalField(label='GANO', min_value=0, max_value=4, max_digits=3, decimal_places=2)
+    kaynak = forms.CharField(
+        label='Kaynak', max_length=300, help_text='Örn: OBİS transkripti, 12.02.2026',
+    )
+
+
+class ListeyeDersEkleForm(BootstrapMixin, forms.Form):
+    ders = forms.ModelChoiceField(label='Katalogdaki ders', queryset=Ders.objects.filter(aktif=True))
+    yariyil = forms.IntegerField(label='Önerilen yarıyıl', min_value=1, max_value=8, required=False)
+    gerekce = forms.CharField(label='Gerekçe', max_length=500)
+
+
+class DenemeForm(BootstrapMixin, DonemAlanlariMixin):
+    """Koordinatörün girdiği ders kaydı (doğrudan onaylı). Düzeltmede gerekçe de istenir."""
+
+    durum = forms.ChoiceField(label='Durum', choices=DenemeDurumu.choices)
+    harf_notu = forms.ChoiceField(
+        label='Harf notu', choices=[('', '—')] + HarfNotu.choices, required=False,
+        help_text='Yalnızca Geçti / Kaldı için.',
+    )
+    geriye_donuk = forms.BooleanField(
+        label='Geriye dönük giriş (sistem açılmadan önce alınmış ders)', required=False,
+    )
+
+
+class DenemeDuzeltForm(DenemeForm):
+    gerekce = forms.CharField(label='Düzeltme gerekçesi', max_length=500)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        del self.fields['geriye_donuk']
+
+
+class KuralAyariForm(BootstrapMixin, forms.Form):
+    deger = forms.DecimalField(label='Yeni değer', max_digits=8, decimal_places=2)

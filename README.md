@@ -68,7 +68,7 @@ Elif'in yüklediği imzalı kayıt formu (sentetik PDF) **onay bekler** (koordin
 .\.venv\Scripts\python.exe manage.py test
 ```
 
-94 test; şunları doğrular:
+113 test; şunları doğrular:
 
 - **Servis katmanı:** iş kuralları (onay kilidi, gerekçe zorunluluğu, silme yasağı, kural ayarı sürümleri).
 - **Ekranlar:** her rol kendi sayfalarını açabiliyor; öğrenci ekleme ve katalog işlemleri çalışıyor.
@@ -78,14 +78,17 @@ Elif'in yüklediği imzalı kayıt formu (sentetik PDF) **onay bekler** (koordin
   talep kabul edilince ders listeye ekleniyor; öğrenci ve bölüm başkanı talep yanıtlayamıyor.
 - **Belgeler:** uzantısı `.pdf` yapılmış `.exe` gibi sahte dosyalar ve büyük dosyalar reddediliyor, diske
   yazılmıyor; yeni sürüm eskisini silmiyor; öğrenci başkasının belgesini açamıyor, giriş yapmayan hiç açamıyor.
+- **Koordinatör işlemleri:** GANO (kaynağıyla) girilir; listeye gerekçeyle ders eklenir/çıkarılır, geçilmiş ders
+  çıkarılamaz; onaylı kayıt yalnızca gerekçeyle düzeltilir (eski/yeni değer işlem kaydında) veya iptal edilir, silinmez;
+  kural ayarında yeni değer yeni sürüm olur, eskisi kalır; bölüm başkanı ve öğrenci bunların hiçbirini yapamaz.
 - **Demo verisi:** `seed_demo` beklenen veriyi kuruyor ve ikinci çalıştırmada çoğaltmıyor.
 
 ## Roller
 
 | Rol | Yetki |
 |---|---|
-| **Koordinatör** | Öğrenci ekler ve hesabını açar, ders kataloğunu yönetir, ders kayıtlarını ve belgeleri onaylar / gerekçeyle reddeder, ders taleplerini yanıtlar |
-| **Bölüm Başkanı** | Kayıtları ve işlem geçmişini görür; hiçbir şeyi değiştiremez |
+| **Koordinatör** | Öğrenci ekler ve hesabını açar, ders kataloğunu yönetir, ders kayıtlarını ve belgeleri onaylar / gerekçeyle reddeder, ders taleplerini yanıtlar; ana dal GANO'sunu kaynağıyla girer; öğrencinin ders listesine gerekçeyle ders ekler / çıkarır; geriye dönük ders kaydı girer; onaylı kaydı gerekçeyle düzeltir veya iptal eder; kural ayarlarını (sürümlü) günceller |
+| **Bölüm Başkanı** | Kayıtları, kural ayarlarını ve işlem geçmişini görür; hiçbir şeyi değiştiremez |
 | **Öğrenci** | Yalnızca kendi ders listesini ve ilerlemesini görür; listesinden ders seçer, listesinde olmayan ders için talep gönderir; imzalı form ve transkript yükler; kendi kendine kayıt olamaz |
 
 Yetki her sayfada **sunucu tarafında** kontrol edilir (`hesaplar/yetki.py` → `rol_gerekli`); servis
@@ -122,7 +125,8 @@ templates/              Ortak şablonlar (base.html, giriş, 403)
 ## Durum
 
 İlk sürüm (Ekim 2026): giriş ve roller, öğrenci ekleme, ders kataloğu, öğrenci ders listesi ve AKTS
-özeti, işlem geçmişi, demo verisi. Sonra eklenenler: onay / ret ekranı, öğrencinin ders seçimi ve ders talepleri, belge yükleme ve inceleme.
+özeti, işlem geçmişi, demo verisi. Sonra eklenenler: onay / ret ekranı, öğrencinin ders seçimi ve ders talepleri, belge yükleme ve inceleme,
+koordinatörün öğrenci kartı işlemleri (GANO, ders listesi, geriye dönük kayıt, düzeltme / iptal) ve kural ayarları ekranı.
 
 Henüz yapılmayanlar:
 
