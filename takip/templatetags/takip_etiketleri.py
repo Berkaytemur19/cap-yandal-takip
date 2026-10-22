@@ -12,6 +12,8 @@ RENKLER = {
     'KABUL': 'success', 'RED': 'danger',
     # ek belge isteği durumu
     'YUKLENDI': 'info text-dark',
+    # kural uyarısı seviyesi
+    'KRITIK': 'danger', 'UYARI': 'warning text-dark', 'BILGI': 'info text-dark',
     # kayıt durumu
     'AKTIF': 'success', 'MEZUN': 'primary', 'SERTIFIKA_ALDI': 'primary', 'KAYDI_SILINDI': 'danger',
 }

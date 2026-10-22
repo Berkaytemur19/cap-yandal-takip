@@ -21,6 +21,12 @@
   </div></div></div>
 </div>
 
+{% if sayilar.uyari %}
+<div class="alert alert-danger">
+  Açık <strong>{{ sayilar.uyari }}</strong> kural uyarısı var (kritik veya uyarı). <a href="{% url 'uyarilar' %}">Uyarıları incele</a>
+</div>
+{% endif %}
+
 {% if okunmamis_mesaj %}
 <div class="alert alert-warning">
   Öğrencilerden <strong>{{ okunmamis_mesaj }}</strong> okunmamış mesaj var. <a href="{% url 'mesajlar' %}">Mesajları aç</a>

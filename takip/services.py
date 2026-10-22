@@ -7,8 +7,10 @@
 """
 
 import hashlib
+import threading
 import secrets
 import uuid
+from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
 
@@ -18,14 +20,17 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
 from django.core.files.storage import FileSystemStorage
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from hesaplar.models import Rol
 
+from . import kurallar
+
 from .models import (
     DONEMLI_BELGE_TURLERI, OGRENCI_BELGE_TURLERI, AkademikDonem, AnaDalGanoKaydi, Belge, BelgeDurumu,
     BelgeIstegi, BelgeTuru, DenemeDurumu, Ders, DersDenemesi, DersTalebi, DersTuru, DonemTuru, HarfNotu,
-    IslemKaydi, KayitDurumu, KuralAyari, Mesaj, NotGirisi, Ogrenci, OgrenciDers, OnayDurumu, Protokol,
+    IslemKaydi, KayitDurumu, KuralAyari, KuralUyarisi, Mesaj, NotGirisi, Ogrenci, OgrenciDers, OnayDurumu, Protokol,
     ProtokolDersi, TalepDurumu,
 )
 
@@ -188,6 +193,7 @@ def ogrenci_ekle(kullanici, *, ogrenci_no, ad, soyad, okul_eposta, program_turu,
             ogrenci=ogrenci, ders=satir.ders, yariyil=satir.yariyil,
             ekleme_gerekcesi=f'Protokolden: {protokol.ad}', ekleyen=kullanici,
         )
+    _kontrol_et(ogrenci)
     return ogrenci, sifre
 
 
@@ -203,6 +209,7 @@ def ana_dal_gano_gir(kullanici, ogrenci, donem, gano, kaynak):
         ogrenci=ogrenci, donem=donem, gano=gano, kaynak=kaynak.strip(), giren=kullanici,
     )
     islem_kaydet(kullanici, 'ana_dal_gano_gir', kayit, yeni=_deger(kayit, ['donem', 'gano', 'kaynak']))
+    _kontrol_et(ogrenci)
     return kayit
 
 
@@ -222,6 +229,7 @@ def listeye_ders_ekle(kullanici, ogrenci, ders, gerekce, yariyil=None):
         ogrenci=ogrenci, ders=ders, yariyil=yariyil, ekleme_gerekcesi=gerekce, ekleyen=kullanici,
     )
     islem_kaydet(kullanici, 'liste_ders_ekle', kalem, yeni={'ders': ders.kod}, aciklama=gerekce)
+    _kontrol_et(ogrenci)
     return kalem
 
 
@@ -243,6 +251,7 @@ def listeden_ders_cikar(kullanici, kalem, gerekce):
         kullanici, 'liste_ders_cikar', kalem,
         eski={'listede': 'True'}, yeni={'listede': 'False'}, aciklama=gerekce,
     )
+    _kontrol_et(kalem.ogrenci)
     return kalem
 
 
@@ -296,6 +305,7 @@ def deneme_ekle(kullanici, kalem, donem, durum, harf_notu='', geriye_donuk=False
         kullanici, 'deneme_ekle', deneme, yeni=_deger(deneme, DENEME_ALANLARI),
         aciklama='Geriye dönük giriş' if geriye_donuk else '',
     )
+    _kontrol_et(kalem.ogrenci)
     return deneme
 
 
@@ -310,6 +320,7 @@ def deneme_onayla(kullanici, deneme):
     deneme.onay_tarihi = timezone.now()
     deneme.save()
     islem_kaydet(kullanici, 'deneme_onayla', deneme, eski=eski, yeni=_deger(deneme, ['onay_durumu']))
+    _kontrol_et(deneme.liste_kalemi.ogrenci)
     return deneme
 
 
@@ -347,6 +358,7 @@ def deneme_duzelt(kullanici, deneme, gerekce, *, donem=None, durum=None, harf_no
     deneme.save()
     islem_kaydet(kullanici, 'deneme_duzelt', deneme, eski=eski,
                  yeni=_deger(deneme, DENEME_ALANLARI), aciklama=gerekce)
+    _kontrol_et(deneme.liste_kalemi.ogrenci)
     return deneme
 
 
@@ -363,6 +375,7 @@ def deneme_iptal(kullanici, deneme, gerekce):
     deneme.save()
     islem_kaydet(kullanici, 'deneme_iptal', deneme, eski=eski,
                  yeni=_deger(deneme, ['onay_durumu']), aciklama=gerekce)
+    _kontrol_et(deneme.liste_kalemi.ogrenci)
     return deneme
 
 
@@ -841,6 +854,7 @@ def not_onayla(kullanici, giris):
                  yeni={'onay_durumu': OnayDurumu.ONAYLANDI})
     islem_kaydet(kullanici, 'deneme_not_isle', deneme, eski=eski_deneme, yeni=_deger(deneme, DENEME_ALANLARI),
                  aciklama=f'Not girişi #{giris.pk} onaylandı')
+    _kontrol_et(deneme.liste_kalemi.ogrenci)
     return giris
 
 
@@ -880,4 +894,106 @@ def kural_ayari_belirle(kullanici, anahtar, program_turu, deger, aciklama, madde
         eski={'deger': str(guncel.deger), 'surum': str(guncel.surum)} if guncel else None,
         yeni={'deger': str(ayar.deger), 'surum': str(ayar.surum)},
     )
+    # Yeni değerle yeni kontrol yapılır; eski değerle açılmış uyarılar yeniden yazılmaz, kapatılır.
+    for ogrenci in Ogrenci.objects.filter(kayit_durumu=KayitDurumu.AKTIF):
+        _kontrol_et(ogrenci)
     return ayar
+
+
+# ---------------------------------------------------------------------------
+# Kural kontrolleri ve koordinatör kararı
+# ---------------------------------------------------------------------------
+
+_ertele = threading.local()
+
+
+@contextmanager
+def kontroller_ertelenmis():
+    """Toplu veri girişinde (seed, ileride CSV/OBİS aktarımı) kontrolleri sona erteler.
+
+    Aksi hâlde geçmiş dersler tek tek girilirken ara durumlar için (ör. 'ders alınmamış') geçici uyarılar açılır.
+    """
+    if getattr(_ertele, 'ogrenciler', None) is not None:
+        yield
+        return
+    _ertele.ogrenciler = {}
+    try:
+        yield
+        bekleyenler = list(_ertele.ogrenciler.values())
+    finally:
+        _ertele.ogrenciler = None
+    for ogrenci in bekleyenler:
+        kurallari_kontrol_et(ogrenci)
+
+
+def _kontrol_et(ogrenci):
+    bekleyenler = getattr(_ertele, 'ogrenciler', None)
+    if bekleyenler is not None:
+        bekleyenler[ogrenci.pk] = ogrenci
+    else:
+        kurallari_kontrol_et(ogrenci)
+
+
+@transaction.atomic
+def kurallari_kontrol_et(ogrenci, tarih=None):
+    """Öğrenciyi güncel kural ayarlarıyla kontrol eder ve açık uyarıları günceller.
+
+    - Aynı sonuç sürüyorsa var olan uyarıya dokunulmaz.
+    - Sonuç değiştiyse (ölçüm, seviye veya kural sürümü) eski uyarı kapatılır, yenisi açılır.
+    - Koşul ortadan kalktıysa uyarı kapatılır. Hiçbir uyarı silinmez veya yeniden yazılmaz.
+    - Kaydı aktif olmayan öğrenci kontrol edilmez; açık uyarıları kapatılır.
+    Dönüş: açık uyarılar.
+    """
+    ogrenci.refresh_from_db()
+    simdi = timezone.now()
+    aktif = ogrenci.kayit_durumu == KayitDurumu.AKTIF
+    bulgular = {b.kod: b for b in kurallar.kontrol_et(ogrenci, tarih or timezone.localdate())} if aktif else {}
+    for uyari in ogrenci.uyarilar.filter(kapanma_tarihi__isnull=True):
+        bulgu = bulgular.get(uyari.kod)
+        if bulgu and (bulgu.seviye, bulgu.mesaj, bulgu.kurallar) == (uyari.seviye, uyari.mesaj, uyari.kurallar):
+            del bulgular[uyari.kod]
+            continue
+        uyari.kapanma_tarihi = simdi
+        uyari.kapanma_nedeni = ('Durum değişti; güncel sonuç yeni uyarı olarak açıldı.' if bulgu else
+                                'Koşul artık sağlanmıyor.' if aktif else
+                                f'Kayıt durumu: {ogrenci.get_kayit_durumu_display()}.')
+        uyari.save(update_fields=['kapanma_tarihi', 'kapanma_nedeni', 'guncellenme'])
+    for b in bulgular.values():
+        KuralUyarisi.objects.create(ogrenci=ogrenci, kod=b.kod, seviye=b.seviye, mesaj=b.mesaj, madde=b.madde,
+                                    kurallar=b.kurallar, olcum=b.olcum)
+    return list(ogrenci.uyarilar.filter(kapanma_tarihi__isnull=True))
+
+
+def tum_ogrencileri_kontrol_et(tarih=None):
+    """Tarihe bağlı kurallar (ders almama, azami süre) için: tüm aktif öğrencileri ve açık uyarısı olanları."""
+    ogrenciler = Ogrenci.objects.filter(
+        Q(kayit_durumu=KayitDurumu.AKTIF) | Q(uyarilar__kapanma_tarihi__isnull=True)).distinct()
+    for ogrenci in ogrenciler:
+        kurallari_kontrol_et(ogrenci, tarih)
+    return ogrenciler.count()
+
+
+# Program türüne göre koordinatörün verebileceği kayıt durumu kararları.
+KARARLAR = {
+    'CAP': [KayitDurumu.AKTIF, KayitDurumu.MEZUN, KayitDurumu.KAYDI_SILINDI, KayitDurumu.IPTAL],
+    'YDP': [KayitDurumu.AKTIF, KayitDurumu.SERTIFIKA_ALDI, KayitDurumu.KAYDI_SILINDI, KayitDurumu.IPTAL],
+}
+
+
+@transaction.atomic
+def kayit_durumu_degistir(kullanici, ogrenci, yeni_durum, gerekce):
+    """Mezuniyet / sertifika / kayıt silme kararı. Sistem yalnızca uyarır; kararı koordinatör gerekçeyle verir."""
+    _koordinator_olmali(kullanici)
+    _gerekce_olmali(gerekce)
+    if yeni_durum not in KARARLAR[ogrenci.program_turu]:
+        raise IslemHatasi('Bu karar öğrencinin programı için verilemez.')
+    if yeni_durum == ogrenci.kayit_durumu:
+        raise IslemHatasi('Öğrenci zaten bu durumda.')
+    eski = _deger(ogrenci, ['kayit_durumu', 'durum_gerekcesi'])
+    ogrenci.kayit_durumu = yeni_durum
+    ogrenci.durum_gerekcesi = gerekce.strip()
+    ogrenci.save()
+    islem_kaydet(kullanici, 'kayit_durumu_karari', ogrenci, eski=eski,
+                 yeni=_deger(ogrenci, ['kayit_durumu', 'durum_gerekcesi']), aciklama=ogrenci.durum_gerekcesi)
+    kurallari_kontrol_et(ogrenci)
+    return ogrenci

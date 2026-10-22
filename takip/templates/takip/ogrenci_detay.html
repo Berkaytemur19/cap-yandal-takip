@@ -6,6 +6,28 @@
 {% if user.bolum_baskani_mi %}<div class="alert alert-info py-2 small">Salt okunur görünüm.</div>{% endif %}
 
 {% include 'takip/_ogrenci_bilgileri.html' %}
+{% if ogrenci.durum_gerekcesi %}<p class="small text-muted mt-n3">Kayıt durumu gerekçesi: {{ ogrenci.durum_gerekcesi }}</p>{% endif %}
+
+{% include 'takip/_uyari_listesi.html' %}
+{% if karar_form %}
+<div class="row g-3 mb-4">
+  <div class="col-lg-8"><div class="card"><div class="card-body">
+    <h2 class="h6">Karar: mezuniyet / sertifika / kayıt silme</h2>
+    <p class="small text-muted mb-2">Sistem yalnızca uyarır; karar gerekçesiyle buradan verilir ve işlem geçmişine yazılır.
+      Kaydı aktif olmayan öğrenci ders seçemez.</p>
+    {% url 'karar_ver' ogrenci.pk as karar_url %}
+    {% include 'takip/_satir_formu.html' with form=karar_form action=karar_url dugme='Kararı kaydet' %}
+  </div></div></div>
+  <div class="col-lg-4"><div class="card h-100"><div class="card-body">
+    <h2 class="h6">Kuralları şimdi kontrol et</h2>
+    <p class="small text-muted mb-2">Tarihe bağlı kurallar (ders almama, azami süre) için.</p>
+    <form method="post" action="{% url 'kurallari_kontrol_et' %}">
+      {% csrf_token %}<input type="hidden" name="ogrenci" value="{{ ogrenci.pk }}">
+      <button class="btn btn-outline-primary btn-sm">Kontrol et</button>
+    </form>
+  </div></div></div>
+</div>
+{% endif %}
 
 <h2 class="h5">Ana dal GANO geçmişi</h2>
 <table class="table table-sm bg-white small mb-4">

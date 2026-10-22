@@ -21,7 +21,7 @@ from django.db import transaction
 from hesaplar.models import Kullanici, Rol
 from takip import services
 from takip.models import (
-    BelgeTuru, DenemeDurumu, Ders, DersTuru, KuralAyari, Ogrenci, Protokol, ProgramTuru,
+    BelgeTuru, DenemeDurumu, Ders, DersTuru, KuralAyari, KuralProgrami, Ogrenci, Protokol, ProgramTuru,
 )
 
 DEMO_SIFRE = 'Demo.2026'
@@ -103,6 +103,11 @@ KURAL_AYARLARI = [
     ('ydp.yandal_gano_uyari', ProgramTuru.YDP, '2.00', 'Yandal GANO iki dönem bu değerin altı → uyarı', '7-6'),
     ('ydp.sertifika_gano', ProgramTuru.YDP, '2.00', 'Sertifika için en az yandal GANO', '7-8'),
     ('ydp.ek_sure_yariyil', ProgramTuru.YDP, '2', 'En çok ek süre (yarıyıl)', '7-9'),
+] + [
+    # Program (yandal) ortalaması için harf notu katsayıları — Lisans Eğitim-Öğretim Yönetmeliği'ndeki karşılıklar.
+    (f'not.katsayi.{harf}', KuralProgrami.ORTAK, katsayi, f'{harf} harf notunun katsayısı', 'Lisans yön.')
+    for harf, katsayi in [('AA', '4.00'), ('BA', '3.50'), ('BB', '3.00'), ('CB', '2.50'), ('CC', '2.00'),
+                          ('DC', '1.50'), ('DD', '1.00'), ('FD', '0.50'), ('FF', '0.00')]
 ]
 
 GANO_KAYNAGI = 'OBİS transkripti (sentetik demo verisi)'
@@ -224,7 +229,8 @@ class Command(BaseCommand):
             sys.stdout.reconfigure(encoding='utf-8')
 
         self.sayac = {'eklendi': 0, 'atlandi': 0}
-        with transaction.atomic():
+        # Kurallar her öğrenci için bir kez, tüm geçmiş veri girildikten sonra kontrol edilir.
+        with transaction.atomic(), services.kontroller_ertelenmis():
             koord = self._hesap('koordinator', Rol.KOORDINATOR, 'Demo', 'Koordinatör')
             self._hesap('baskan', Rol.BOLUM_BASKANI, 'Demo', 'Bölüm Başkanı')
             dersler = self._katalog(koord)

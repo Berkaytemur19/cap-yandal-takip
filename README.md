@@ -58,6 +58,7 @@ Zeynep'in listesinde olmayan bir ders için gönderdiği 1 **ders talebi** yanı
 Elif'in yüklediği imzalı kayıt formu (sentetik PDF) **onay bekler** (koordinatör → "Belgeler").
 Burak'ın geçen dönem (2025-2026 Bahar) notu, not belgesiyle birlikte **onay bekler** (koordinatör → "Onay bekleyenler").
 Zeynep'in notu girilecek bir dersi var ama o dönemin not belgesi yok: Zeynep → "Not girişi" önce belgeyi yüklemesini ister.
+Burak'ın ana dal GANO'su iki dönem 2.72 altında: **kritik kural uyarısı** (koordinatör → "Uyarılar", Burak → kendi sayfası).
 Koordinatörün **3 okunmamış mesajı** var (menüde rozet); Burak'tan istenen **ek belge** (muafiyet formu) yüklenmeyi bekliyor.
 
 - `seed_demo` tekrar çalıştırılabilir: var olan kayıtları atlar, hiçbir şeyi çoğaltmaz.
@@ -71,7 +72,7 @@ Koordinatörün **3 okunmamış mesajı** var (menüde rozet); Burak'tan istenen
 .\.venv\Scripts\python.exe manage.py test
 ```
 
-155 test; şunları doğrular:
+177 test; şunları doğrular:
 
 - **Servis katmanı:** iş kuralları (onay kilidi, gerekçe zorunluluğu, silme yasağı, kural ayarı sürümleri).
 - **Ekranlar:** her rol kendi sayfalarını açabiliyor; öğrenci ekleme ve katalog işlemleri çalışıyor.
@@ -91,6 +92,10 @@ Koordinatörün **3 okunmamış mesajı** var (menüde rozet); Burak'tan istenen
   öğrenci yalnızca kendi yazışmasını ve ekini görür; bölüm başkanı okur ama yazamaz, okundu bilgisini değiştirmez;
   okunmamış mesaj rozeti; istek bekliyor → yüklendi → onaylandı / reddedildi olarak izlenir, reddedilince yeni sürüm
   yüklenir; başka öğrenci isteğe yanıt veremez; resmî yazıyı yalnızca koordinatör yükler.
+- **Kural kontrolleri:** ÇAP GANO (ilk düşüş uyarı, ikinci düşüş / alt sınır altı kritik), üst üste ders almama,
+  azami süre, mezuniyet şartı; YDP ders planı alt sınırı, ana dal GANO, yandal ortalaması (üst üste iki dönem),
+  sertifika şartı; yalnızca onaylı kayıtlar sayılır; aynı sonuç yeni uyarı açmaz; kural değişince eski uyarı
+  yeniden yazılmaz, kapatılır; karar gerekçesiz verilemez ve öğrenci programına uygun olmalıdır.
 - **Demo verisi:** `seed_demo` beklenen veriyi kuruyor ve ikinci çalıştırmada çoğaltmıyor.
 
 ## Roller
@@ -138,11 +143,11 @@ templates/              Ortak şablonlar (base.html, giriş, 403)
 özeti, işlem geçmişi, demo verisi. Sonra eklenenler: onay / ret ekranı, öğrencinin ders seçimi ve ders talepleri, belge yükleme ve inceleme,
 koordinatörün öğrenci kartı işlemleri (GANO, ders listesi, geriye dönük kayıt, düzeltme / iptal), kural ayarları ekranı,
 öğrencinin dönem sonu not girişi (ÇAP/YDP not belgesi şartıyla) ve koordinatörün not onayı,
-koordinatör ↔ öğrenci mesajlaşma (ekli dosya, okunmamış rozeti), ek belge isteği ve koordinatörün belge yüklemesi.
+koordinatör ↔ öğrenci mesajlaşma (ekli dosya, okunmamış rozeti), ek belge isteği ve koordinatörün belge yüklemesi,
+yönerge kural kontrolleri (kalıcı, sürümlü uyarılar) ve koordinatörün mezuniyet / sertifika / kayıt silme kararı.
 
 Henüz yapılmayanlar:
 
-- Kural ayarlarına göre uyarı üretme (GANO, ders almama, süre)
 
 ## Canlıya alma (PythonAnywhere)
 
@@ -191,6 +196,8 @@ ardından Web sekmesinde **Reload**.
 - Ayarlar `.env` dosyasından okunur (`.env.ornek`'e bakın). `DJANGO_DEBUG=0` iken gizli anahtar tanımlanmamışsa uygulama açılmaz.
 - `seed_demo --canli` yalnızca sentetik verili demo sunucusu içindir: herkesin bildiği `Demo.2026` şifresini kullanır.
 - Ücretsiz hesapta web uygulaması 3 ayda bir Web sekmesinden uzatılmalıdır.
+- Tarihe bağlı kurallar (ders almama, azami süre) için **Tasks** sekmesine günlük görev eklenebilir:
+  `cd ~/cap-yandal-takip && .venv/bin/python manage.py kural_kontrol`
 
 ## Sorun giderme
 

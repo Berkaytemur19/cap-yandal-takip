@@ -1,0 +1,32 @@
+{% load takip_etiketleri %}
+{# Öğrencinin kural uyarıları. Kullanım: include (acik_uyarilar, kapali_uyarilar, program_ortalamasi bağlamda) #}
+<div class="card mb-4 {% if acik_uyarilar %}border-warning{% endif %}"><div class="card-body">
+  <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+    <h2 class="h5 mb-0">Kural kontrolleri</h2>
+    <span class="small text-muted">Program (ÇAP/YDP) not ortalaması:
+      <strong class="text-body">{{ program_ortalamasi|default:"—" }}</strong></span>
+  </div>
+  <p class="small text-muted mb-2">Yönerge kurallarına göre, yalnızca onaylı kayıtlarla hesaplanır. Uyarı karar değildir; kararı koordinatör verir.</p>
+  {% for u in acik_uyarilar %}
+    <div class="alert alert-{% if u.seviye == 'KRITIK' %}danger{% elif u.seviye == 'UYARI' %}warning{% else %}info{% endif %} py-2 mb-2">
+      <span class="badge bg-{{ u.seviye|rozet }}">{{ u.get_seviye_display }}</span>
+      <span class="small text-muted">{{ u.madde }} · {{ u.olusturulma|date:"d.m.Y" }}</span>
+      <div>{{ u.mesaj }}</div>
+      <div class="small text-muted">Kullanılan kural:
+        {% for anahtar, k in u.kurallar.items %}{% if anahtar|slice:":11" != "not.katsayi" %}<code>{{ anahtar }}</code> = {{ k.deger }} (s{{ k.surum }}){% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}
+      </div>
+    </div>
+  {% empty %}
+    <div class="text-success small">Açık uyarı yok.</div>
+  {% endfor %}
+  {% if kapali_uyarilar %}
+    <details class="small mt-2"><summary>Geçmiş kontroller ({{ kapali_uyarilar|length }})</summary>
+      <ul class="mb-0 mt-1">
+      {% for u in kapali_uyarilar %}
+        <li><span class="badge bg-{{ u.seviye|rozet }}">{{ u.get_seviye_display }}</span> {{ u.mesaj }}
+          <span class="text-muted">— {{ u.olusturulma|date:"d.m.Y" }} açıldı, {{ u.kapanma_tarihi|date:"d.m.Y" }} kapandı: {{ u.kapanma_nedeni }}</span></li>
+      {% endfor %}
+      </ul>
+    </details>
+  {% endif %}
+</div></div>

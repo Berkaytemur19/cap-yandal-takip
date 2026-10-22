@@ -47,6 +47,13 @@ class ProgramTuru(models.TextChoices):
     YDP = 'YDP', 'Yandal (YDP)'
 
 
+class KuralProgrami(models.TextChoices):
+    """Kural ayarının geçtiği program. Harf notu katsayıları gibi ayarlar iki programda ortaktır."""
+    CAP = 'CAP', 'Çift Anadal (ÇAP)'
+    YDP = 'YDP', 'Yandal (YDP)'
+    ORTAK = 'ORT', 'Ortak'
+
+
 class DonemTuru(models.TextChoices):
     GUZ = 'GUZ', 'Güz'
     BAHAR = 'BAHAR', 'Bahar'
@@ -607,7 +614,7 @@ class KuralAyari(SilinmezModel):
     """Yönerge eşikleri. Değer değişince eski satır güncellenmez, yeni sürüm eklenir."""
 
     anahtar = models.CharField(max_length=60, help_text='Örn: cap.mezuniyet_gano')
-    program_turu = models.CharField('program türü', max_length=3, choices=ProgramTuru.choices)
+    program_turu = models.CharField('program türü', max_length=3, choices=KuralProgrami.choices)
     deger = models.DecimalField('değer', max_digits=8, decimal_places=2)
     aciklama = models.CharField('açıklama', max_length=300)
     madde = models.CharField(max_length=20, help_text='Yönerge maddesi, örn: 8c')
@@ -628,6 +635,55 @@ class KuralAyari(SilinmezModel):
     @classmethod
     def guncel(cls, anahtar):
         return cls.objects.filter(anahtar=anahtar).order_by('-surum').first()
+
+
+class UyariSeviyesi(models.TextChoices):
+    BILGI = 'BILGI', 'Bilgi'          # ör. mezuniyet şartları sağlanıyor
+    UYARI = 'UYARI', 'Uyarı'          # ör. bir defalık hak kullanıldı
+    KRITIK = 'KRITIK', 'Kritik'      # ör. yönergeye göre kaydı silinmesi gereken durum
+
+
+class UyariDegistirilemez(Exception):
+    """Oluşmuş bir kural uyarısının içeriği değiştirilmeye çalışıldı."""
+
+
+class KuralUyarisi(SilinmezModel):
+    """Kural kontrolünün sonucu. Uyarı karar değildir; kararı koordinatör verir.
+
+    Kalıcıdır: o anki ölçüm ve kullanılan kural sürümleri saklanır. Kural değeri sonradan değişse de
+    geçmiş kontrol yeniden yazılmaz; koşul ortadan kalkınca uyarı yalnızca kapatılır.
+    """
+
+    ogrenci = models.ForeignKey(Ogrenci, on_delete=models.PROTECT, related_name='uyarilar')
+    kod = models.CharField(max_length=60, help_text='Kontrolün adı, örn: cap.gano_kayit_silme')
+    seviye = models.CharField(max_length=6, choices=UyariSeviyesi.choices)
+    mesaj = models.TextField()
+    madde = models.CharField(max_length=40, blank=True)
+    kurallar = models.JSONField('kullanılan kural sürümleri', default=dict)
+    olcum = models.JSONField('ölçülen değerler', default=dict)
+    kapanma_tarihi = models.DateTimeField('kapanma tarihi', null=True, blank=True)
+    kapanma_nedeni = models.CharField('kapanma nedeni', max_length=200, blank=True)
+
+    DEGISMEZ_ALANLAR = ['ogrenci_id', 'kod', 'seviye', 'mesaj', 'madde', 'kurallar', 'olcum']
+
+    class Meta:
+        verbose_name = 'Kural uyarısı'
+        verbose_name_plural = 'Kural uyarıları'
+        ordering = ['-olusturulma']
+
+    def __str__(self):
+        return f'{self.ogrenci.ogrenci_no} — {self.get_seviye_display()}: {self.mesaj[:60]}'
+
+    @property
+    def acik(self):
+        return self.kapanma_tarihi is None
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            eski = KuralUyarisi.objects.filter(pk=self.pk).values(*self.DEGISMEZ_ALANLAR).first()
+            if eski and any(eski[a] != getattr(self, a) for a in self.DEGISMEZ_ALANLAR):
+                raise UyariDegistirilemez('Kural uyarısı değiştirilemez; yalnızca kapatılabilir.')
+        super().save(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------

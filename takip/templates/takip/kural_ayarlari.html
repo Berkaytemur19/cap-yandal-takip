@@ -13,7 +13,7 @@
   {% for k in kurallar %}
     {% with g=k.guncel %}
     <tr>
-      <td>{{ g.program_turu }}</td>
+      <td>{{ g.get_program_turu_display }}</td>
       <td>{{ g.aciklama }}<div class="small text-muted"><code>{{ g.anahtar }}</code></div>
         {% if k.eskiler %}
         <details class="small mt-1"><summary>Eski sürümler ({{ k.eskiler|length }})</summary>

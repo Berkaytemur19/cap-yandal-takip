@@ -3,7 +3,7 @@ from django.core.validators import RegexValidator
 
 from .models import (
     DONEMLI_BELGE_TURLERI, OGRENCI_BELGE_TURLERI, AkademikDonem, BelgeTuru, DenemeDurumu, Ders, DersDenemesi, DersTuru, DonemTuru, HarfNotu,
-    OgrenciDers, OnayDurumu, ProgramTuru, Protokol,
+    KayitDurumu, OgrenciDers, OnayDurumu, ProgramTuru, Protokol,
 )
 
 
@@ -233,3 +233,17 @@ class MesajForm(BootstrapMixin, forms.Form):
     metin = forms.CharField(label='Mesaj', max_length=5000, widget=forms.Textarea(attrs={'rows': 3}))
     ek = forms.FileField(label='Ek dosya (isteğe bağlı)', required=False, widget=DOSYA_GIRDISI,
                          help_text='PDF, JPG veya PNG; en fazla 5 MB.')
+
+
+class KararForm(BootstrapMixin, forms.Form):
+    """Mezuniyet / sertifika / kayıt silme kararı. Seçenekler öğrencinin programına göre gelir."""
+
+    yeni_durum = forms.ChoiceField(label='Karar (yeni kayıt durumu)')
+    gerekce = forms.CharField(label='Gerekçe', max_length=1000,
+                              help_text='Örn: Yönetim kurulu kararı tarih/sayı, ana dal mezuniyet teyidi.')
+
+    def __init__(self, *args, ogrenci, secenekler, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['yeni_durum'].choices = [
+            (d, KayitDurumu(d).label) for d in secenekler if d != ogrenci.kayit_durumu
+        ]

@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% load takip_etiketleri %}
+{% block baslik %}Kural uyarıları{% endblock %}
+{% block icerik %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+  <h1 class="h3 mb-1">Kural uyarıları</h1>
+  {% if user.koordinator_mu %}
+  <form method="post" action="{% url 'kurallari_kontrol_et' %}">
+    {% csrf_token %}
+    <button class="btn btn-outline-primary btn-sm">Tüm öğrencileri şimdi kontrol et</button>
+  </form>
+  {% endif %}
+</div>
+<p class="text-muted small">Kontroller ders, not, GANO veya kural ayarı değiştiğinde kendiliğinden yapılır. Tarihe bağlı kurallar
+  (ders almama, azami süre) için düğmeyle ya da günlük <code>manage.py kural_kontrol</code> komutuyla tekrarlanır.
+  Uyarı karar değildir; kararı koordinatör öğrenci kartından verir.
+  {% if user.bolum_baskani_mi %}Salt okunur görünüm.{% endif %}</p>
+
+<div class="table-responsive">
+<table class="table bg-white align-middle">
+  <thead><tr><th>Seviye</th><th>Öğrenci</th><th>Uyarı</th><th>Dayanak</th><th>Tarih</th></tr></thead>
+  <tbody>
+  {% for u in uyarilar %}
+    <tr>
+      <td><span class="badge bg-{{ u.seviye|rozet }}">{{ u.get_seviye_display }}</span></td>
+      <td class="text-nowrap"><a href="{% url 'ogrenci_detay' u.ogrenci.pk %}">{{ u.ogrenci.ogrenci_no }}</a><br>
+        <span class="small">{{ u.ogrenci.ad_soyad }} · {{ u.ogrenci.program_turu }}</span></td>
+      <td>{{ u.mesaj }}</td>
+      <td class="small text-nowrap">{{ u.madde }}</td>
+      <td class="small text-nowrap">{{ u.olusturulma|date:"d.m.Y" }}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="5" class="text-muted">Açık uyarı yok.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

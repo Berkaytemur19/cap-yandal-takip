@@ -14,7 +14,7 @@ from takip import services
 from takip.management.commands.seed_demo import DEMO_SIFRE
 from takip.models import (
     Belge, BelgeDurumu, BelgeIstegi, BelgeTuru, DenemeDurumu, DersDenemesi, DersTalebi, IslemKaydi, KuralAyari,
-    Mesaj, NotGirisi, Ogrenci, OnayDurumu, Protokol, ProgramTuru, TalepDurumu,
+    KuralUyarisi, Mesaj, NotGirisi, Ogrenci, OnayDurumu, Protokol, ProgramTuru, TalepDurumu,
 )
 
 
@@ -55,7 +55,7 @@ class SeedDemoTest(TestCase):
         self.assertGreaterEqual(satirlar.count(), 6)
 
     def test_kural_ayarlari(self):
-        self.assertEqual(KuralAyari.objects.count(), 13)
+        self.assertEqual(KuralAyari.objects.count(), 22)  # 13 yönerge eşiği + 9 harf katsayısı
         self.assertEqual(str(KuralAyari.guncel('cap.mezuniyet_gano').deger), '2.72')
 
     def test_ogrenciler_ve_ders_gecmisi(self):
@@ -96,6 +96,13 @@ class SeedDemoTest(TestCase):
         self.assertEqual((istek.ogrenci.ogrenci_no, istek.durum[0]), ('25330102', 'BEKLIYOR'))
         koord = Kullanici.objects.get(username='koordinator')
         self.assertEqual(services.okunmamis_mesaj_sayisi(koord), 3)
+
+    def test_kural_uyarilari(self):
+        # Burak'ın ana dal GANO'su iki dönem 2.72 altında (2.65, 2.55): ÇAP Md 9e kayıt silme uyarısı.
+        uyari = KuralUyarisi.objects.get()
+        self.assertEqual((uyari.ogrenci.ogrenci_no, uyari.kod, uyari.seviye), ('25330102', 'cap.gano', 'KRITIK'))
+        self.assertEqual(uyari.kurallar['cap.gano_kayit_silme'], {'deger': '2.72', 'surum': 1, 'madde': '9e'})
+        self.assertTrue(uyari.acik)  # toplu girişte ara durumlar için geçici uyarı açılıp kapanmadı
 
     def test_bekleyen_ders_talebi(self):
         talep = DersTalebi.objects.get()

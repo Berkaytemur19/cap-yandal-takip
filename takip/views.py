@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, F, Max, Q
+from django.db.models import Case, Count, F, IntegerField, Max, Q, Value, When
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -16,15 +16,16 @@ from django.views.decorators.http import require_POST
 from hesaplar.models import Rol
 from hesaplar.yetki import rol_gerekli
 
-from . import services
+from . import kurallar, services
 from .forms import (
     BelgeIstegiForm, BelgeYukleForm, DenemeDuzeltForm, DenemeForm, DersForm, DersSecForm, GanoForm,
-    IstekYanitForm, KoordinatorBelgeForm, KuralAyariForm, ListeyeDersEkleForm, MesajForm, OgrenciEkleForm,
+    IstekYanitForm, KararForm, KoordinatorBelgeForm, KuralAyariForm, ListeyeDersEkleForm, MesajForm, OgrenciEkleForm,
     TalepForm,
 )
 from .models import (
     Belge, BelgeDurumu, BelgeIstegi, BelgeTuru, Ders, DersDenemesi, DersTalebi, HarfNotu, IslemKaydi,
-    KuralAyari, Mesaj, NotGirisi, Ogrenci, OgrenciDers, OnayDurumu, ProgramTuru, TalepDurumu,
+    KuralAyari, KuralUyarisi, Mesaj, NotGirisi, Ogrenci, OgrenciDers, OnayDurumu, ProgramTuru, TalepDurumu,
+    UyariSeviyesi,
 )
 
 KOORD = Rol.KOORDINATOR
@@ -54,6 +55,8 @@ def ana_sayfa(request):
     sayilar['aktif_ders'] = Ders.objects.filter(aktif=True).count()
     sayilar['talep'] = DersTalebi.objects.filter(durum=TalepDurumu.BEKLIYOR).count()
     sayilar['belge'] = Belge.objects.filter(durum=BelgeDurumu.BEKLIYOR).count()
+    sayilar['uyari'] = KuralUyarisi.objects.filter(
+        kapanma_tarihi__isnull=True, seviye__in=[UyariSeviyesi.KRITIK, UyariSeviyesi.UYARI]).count()
     son_islemler = IslemKaydi.objects.select_related('kullanici')[:8]
     return render(request, 'takip/ana_sayfa.html', {'sayilar': sayilar, 'son_islemler': son_islemler})
 
@@ -98,6 +101,7 @@ def _ogrenci_detay_sayfasi(request, ogrenci, **formlar):
     baglam = _ders_listesi_baglami(ogrenci)
     baglam['belgeler'] = ogrenci.belgeler.select_related('donem')
     baglam['istekler'] = ogrenci.belge_istekleri.select_related('donem', 'belge', 'isteyen')
+    baglam.update(_uyari_baglami(ogrenci))
     baglam['mesaj_sayisi'] = ogrenci.mesajlar.count()
     if request.user.rol == KOORD:
         donemler = services.belge_donemleri(ogrenci)
@@ -105,6 +109,8 @@ def _ogrenci_detay_sayfasi(request, ogrenci, **formlar):
         baglam['liste_form'] = formlar.get('liste_form') or ListeyeDersEkleForm()
         baglam['belge_form'] = formlar.get('belge_form') or KoordinatorBelgeForm(donemler=donemler)
         baglam['istek_form'] = formlar.get('istek_form') or BelgeIstegiForm(donemler=donemler)
+        baglam['karar_form'] = formlar.get('karar_form') or KararForm(
+            ogrenci=ogrenci, secenekler=services.KARARLAR[ogrenci.program_turu])
     return render(request, 'takip/ogrenci_detay.html', baglam, status=400 if formlar else 200)
 
 
@@ -311,6 +317,65 @@ def not_reddet(request, pk):
 
 
 # ---------------------------------------------------------------------------
+# Kural uyarıları ve koordinatör kararı
+# ---------------------------------------------------------------------------
+
+SEVIYE_SIRASI = Case(*(When(seviye=s, then=Value(i)) for i, s in enumerate(
+    [UyariSeviyesi.KRITIK, UyariSeviyesi.UYARI, UyariSeviyesi.BILGI])), output_field=IntegerField())
+
+
+def _uyari_baglami(ogrenci):
+    uyarilar = ogrenci.uyarilar.annotate(sira=SEVIYE_SIRASI).order_by('sira', '-olusturulma')
+    return {
+        'acik_uyarilar': [u for u in uyarilar if u.acik],
+        'kapali_uyarilar': [u for u in uyarilar if not u.acik],
+        'program_ortalamasi': kurallar.ogrenci_program_ortalamasi(ogrenci),
+    }
+
+
+@rol_gerekli(KOORD, BASKAN)
+def uyarilar(request):
+    """Tüm öğrencilerin açık kural uyarıları; kritik olanlar en üstte."""
+    acik = (KuralUyarisi.objects.filter(kapanma_tarihi__isnull=True).select_related('ogrenci')
+            .annotate(sira=SEVIYE_SIRASI).order_by('sira', 'ogrenci__ogrenci_no'))
+    return render(request, 'takip/uyarilar.html', {'uyarilar': acik})
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def kurallari_kontrol_et(request):
+    """Kuralları şimdi kontrol eder: formda öğrenci varsa yalnızca onu, yoksa tüm öğrencileri.
+
+    Tarihe bağlı kurallar (ders almama, azami süre) veri değişmeden de sonuç değiştirebilir.
+    """
+    if request.POST.get('ogrenci'):
+        ogrenci = get_object_or_404(Ogrenci, pk=request.POST['ogrenci'])
+        services.kurallari_kontrol_et(ogrenci)
+        messages.success(request, 'Öğrenci güncel kural ayarlarıyla kontrol edildi.')
+        return redirect('ogrenci_detay', pk=ogrenci.pk)
+    sayi = services.tum_ogrencileri_kontrol_et()
+    messages.success(request, f'{sayi} öğrenci güncel kural ayarlarıyla kontrol edildi.')
+    return redirect('uyarilar')
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def karar_ver(request, pk):
+    ogrenci = get_object_or_404(Ogrenci, pk=pk)
+    form = KararForm(request.POST, ogrenci=ogrenci, secenekler=services.KARARLAR[ogrenci.program_turu])
+    if form.is_valid():
+        try:
+            services.kayit_durumu_degistir(request.user, ogrenci, form.cleaned_data['yeni_durum'],
+                                           form.cleaned_data['gerekce'])
+        except services.IslemHatasi as hata:
+            form.add_error(None, str(hata))
+        else:
+            messages.success(request, f'Karar kaydedildi: {ogrenci.get_kayit_durumu_display()}.')
+            return redirect('ogrenci_detay', pk=ogrenci.pk)
+    return _ogrenci_detay_sayfasi(request, ogrenci, karar_form=form)
+
+
+# ---------------------------------------------------------------------------
 # Kural ayarları (koordinatör değiştirir, bölüm başkanı görür)
 # ---------------------------------------------------------------------------
 
@@ -379,6 +444,7 @@ def benim(request):
         raise Http404('Bu hesaba bağlı öğrenci kaydı yok.')
     baglam = _ders_listesi_baglami(ogrenci)
     baglam.pop('gano_kayitlari')  # GANO kaynak notları koordinatöre aittir
+    baglam.update(_uyari_baglami(ogrenci))
     return render(request, 'takip/benim.html', baglam)
 
 

@@ -20,6 +20,7 @@
         {% if user.koordinator_mu %}
           <li class="nav-item"><a class="nav-link" href="{% url 'ogrenci_listesi' %}">Öğrenciler</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'onay_bekleyenler' %}">Onay bekleyenler</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'uyarilar' %}">Uyarılar</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'talepler' %}">Ders talepleri</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'belgeler' %}">Belgeler</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'mesajlar' %}">Mesajlar{% if okunmamis_mesaj %} <span class="badge rounded-pill bg-danger" title="okunmamış mesaj">{{ okunmamis_mesaj }}</span>{% endif %}</a></li>
@@ -29,6 +30,7 @@
           <li class="nav-item"><a class="nav-link" href="{% url 'islem_gecmisi' %}">İşlem geçmişi</a></li>
         {% elif user.bolum_baskani_mi %}
           <li class="nav-item"><a class="nav-link" href="{% url 'ogrenci_listesi' %}">Öğrenciler</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'uyarilar' %}">Uyarılar</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'kural_ayarlari' %}">Kural ayarları</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'mesajlar' %}">Mesajlar</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'islem_gecmisi' %}">İşlem geçmişi</a></li>
