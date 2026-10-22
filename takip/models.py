@@ -412,7 +412,12 @@ class BelgeTuru(models.TextChoices):
     # bu belge yüklenmeden onaya gönderilemez.
     TRANSKRIPT = 'TRANSKRIPT', 'ÇAP/YDP not belgesi (dönem sonu transkripti)'
     ANA_DAL_TRANSKRIPTI = 'ANA_DAL_TRANSKRIPTI', 'Ana dal transkripti (isteğe bağlı)'
+    RESMI_YAZI = 'RESMI_YAZI', 'Resmî yazı (ör. yönetim kurulu kararı)'
     DIGER = 'DIGER', 'Diğer'
+
+
+# Resmî yazıları yalnızca koordinatör yükler.
+OGRENCI_BELGE_TURLERI = [(d, a) for d, a in BelgeTuru.choices if d != BelgeTuru.RESMI_YAZI]
 
 
 # Bu türler bir döneme aittir; yüklerken dönem seçilmesi zorunludur.
@@ -462,6 +467,96 @@ class Belge(SilinmezModel):
     def __str__(self):
         donem = f' {self.donem}' if self.donem_id else ''
         return f'{self.ogrenci.ogrenci_no} — {self.get_tur_display()}{donem} (s{self.surum})'
+
+
+class BelgeIstegi(SilinmezModel):
+    """Koordinatörün öğrenciden istediği ek belge. Durum, yanıt olarak yüklenen belgeden çıkar:
+    belge yoksa bekliyor; varsa belgenin durumu (yüklendi = onay bekliyor, onaylandı, reddedildi).
+    Reddedilirse öğrenci yeni sürüm yükler; istek en son yüklenen belgeyi gösterir."""
+
+    ogrenci = models.ForeignKey(Ogrenci, on_delete=models.PROTECT, related_name='belge_istekleri')
+    tur = models.CharField('belge türü', max_length=20, choices=BelgeTuru.choices)
+    donem = models.ForeignKey(
+        AkademikDonem, on_delete=models.PROTECT, null=True, blank=True, verbose_name='dönem',
+    )
+    aciklama = models.TextField('açıklama')
+    isteyen = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    belge = models.ForeignKey(Belge, on_delete=models.PROTECT, null=True, blank=True, related_name='+',
+                              verbose_name='yüklenen belge')
+
+    class Meta:
+        verbose_name = 'Ek belge isteği'
+        verbose_name_plural = 'Ek belge istekleri'
+        ordering = ['-olusturulma']
+
+    def __str__(self):
+        donem = f' {self.donem}' if self.donem_id else ''
+        return f'{self.ogrenci.ogrenci_no} — {self.get_tur_display()}{donem} isteği'
+
+    DURUMLAR = {
+        None: ('BEKLIYOR', 'Bekliyor'),
+        BelgeDurumu.BEKLIYOR: ('YUKLENDI', 'Yüklendi'),
+        BelgeDurumu.ONAYLANDI: ('ONAYLANDI', 'Onaylandı'),
+        BelgeDurumu.REDDEDILDI: ('REDDEDILDI', 'Reddedildi'),
+    }
+
+    @property
+    def durum(self):
+        """(kod, metin): Bekliyor / Yüklendi / Onaylandı / Reddedildi."""
+        return self.DURUMLAR[self.belge.durum if self.belge_id else None]
+
+    @property
+    def acik(self):
+        """Öğrenci yanıt yükleyebilir mi: henüz yüklenmemiş ya da son yükleme reddedilmiş."""
+        return self.durum[0] in ('BEKLIYOR', 'REDDEDILDI')
+
+
+# ---------------------------------------------------------------------------
+# Mesajlaşma
+# ---------------------------------------------------------------------------
+
+class MesajDegistirilemez(Exception):
+    """Gönderilmiş mesajın içeriği değiştirilmeye çalışıldı."""
+
+
+class Mesaj(SilinmezModel):
+    """Koordinatör ile öğrenci arasındaki yazışma (öğrenci başına tek yazışma).
+
+    Kalıcı kayıttır: silinemez, gönderildikten sonra yalnızca okunma zamanı işlenir.
+    Ek dosya belgelerle aynı kontrolden geçer ve web kökü dışında saklanır.
+    """
+
+    ogrenci = models.ForeignKey(Ogrenci, on_delete=models.PROTECT, related_name='mesajlar')
+    gonderen = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    metin = models.TextField()
+    istek = models.ForeignKey(BelgeIstegi, on_delete=models.PROTECT, null=True, blank=True, related_name='+',
+                              verbose_name='ilgili belge isteği')
+
+    ek_yolu = models.CharField('ek dosya yolu', max_length=300, blank=True, editable=False)
+    ek_adi = models.CharField('ek dosya adı', max_length=200, blank=True)
+    ek_mime = models.CharField('ek dosya türü', max_length=50, blank=True)
+    ek_boyut = models.PositiveIntegerField('ek boyutu (bayt)', null=True, blank=True)
+    ek_sha256 = models.CharField(max_length=64, blank=True)
+
+    okunma_tarihi = models.DateTimeField('okunma tarihi', null=True, blank=True)
+
+    DEGISMEZ_ALANLAR = ['ogrenci_id', 'gonderen_id', 'metin', 'istek_id', 'ek_yolu', 'ek_adi', 'ek_mime',
+                        'ek_boyut', 'ek_sha256']
+
+    class Meta:
+        verbose_name = 'Mesaj'
+        verbose_name_plural = 'Mesajlar'
+        ordering = ['olusturulma', 'pk']
+
+    def __str__(self):
+        return f'{self.ogrenci.ogrenci_no} — {self.gonderen.username}: {self.metin[:40]}'
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            eski = Mesaj.objects.filter(pk=self.pk).values(*self.DEGISMEZ_ALANLAR).first()
+            if eski and any(eski[a] != getattr(self, a) for a in self.DEGISMEZ_ALANLAR):
+                raise MesajDegistirilemez('Gönderilmiş mesaj değiştirilemez.')
+        super().save(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------

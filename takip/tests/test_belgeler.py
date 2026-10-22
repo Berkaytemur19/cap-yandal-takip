@@ -110,7 +110,11 @@ class BelgeServisTest(GeciciDepo, TestVerisi, TestCase):
 
     def test_roller(self):
         with self.assertRaises(PermissionDenied):
+            services.belge_yukle(self.baskan, BelgeTuru.KAYIT_FORMU, dosya())
+        # Koordinatör yükleyebilir ama hangi öğrencinin kartına olduğunu belirtmelidir.
+        with self.assertRaisesMessage(services.IslemHatasi, 'öğrenci seçilmelidir'):
             services.belge_yukle(self.koordinator, BelgeTuru.KAYIT_FORMU, dosya())
+        self.assertEqual(self.diskteki_dosyalar(), [])
         belge = services.belge_yukle(self.ogr, BelgeTuru.KAYIT_FORMU, dosya())
         for kullanici in (self.ogr, self.baskan):
             with self.assertRaises(PermissionDenied):

@@ -40,4 +40,27 @@
 
 <h2 class="h5 mt-4">Belgeler</h2>
 {% include 'takip/_belge_tablosu.html' %}
+{% if belge_form %}
+<div class="card mb-4"><div class="card-body">
+  <h3 class="h6">Belge yükle (koordinatör)</h3>
+  <p class="small text-muted mb-2">Resmî yazılar (ör. yönetim kurulu kararı) dahil her türlü belge. Koordinatörün yüklediği belge doğrudan onaylıdır.</p>
+  {% url 'koordinator_belge_yukle' ogrenci.pk as belge_url %}
+  {% include 'takip/_satir_formu.html' with form=belge_form action=belge_url dugme='Yükle' cok_parcali=True %}
+</div></div>
+{% endif %}
+
+<h2 class="h5 mt-4">Ek belge istekleri</h2>
+{% include 'takip/_istek_tablosu.html' %}
+{% if istek_form %}
+<div class="card mb-4"><div class="card-body">
+  <h3 class="h6">Öğrenciden ek belge iste</h3>
+  <p class="small text-muted mb-2">İstek öğrencinin “Belgelerim” sayfasına ve yazışmasına düşer; durumu buradan izlenir.</p>
+  {% url 'belge_iste' ogrenci.pk as istek_url %}
+  {% include 'takip/_satir_formu.html' with form=istek_form action=istek_url dugme='İste' %}
+</div></div>
+{% endif %}
+
+<h2 class="h5 mt-4">Yazışma</h2>
+<p><a class="btn btn-outline-primary btn-sm" href="{% url 'yazisma' ogrenci.pk %}">Yazışmayı aç</a>
+  <span class="small text-muted ms-2">{{ mesaj_sayisi }} mesaj</span></p>
 {% endblock %}

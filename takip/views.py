@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, F, Max, Q
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -18,12 +18,13 @@ from hesaplar.yetki import rol_gerekli
 
 from . import services
 from .forms import (
-    BelgeYukleForm, DenemeDuzeltForm, DenemeForm, DersForm, DersSecForm, GanoForm, KuralAyariForm,
-    ListeyeDersEkleForm, OgrenciEkleForm, TalepForm,
+    BelgeIstegiForm, BelgeYukleForm, DenemeDuzeltForm, DenemeForm, DersForm, DersSecForm, GanoForm,
+    IstekYanitForm, KoordinatorBelgeForm, KuralAyariForm, ListeyeDersEkleForm, MesajForm, OgrenciEkleForm,
+    TalepForm,
 )
 from .models import (
-    Belge, BelgeDurumu, BelgeTuru, Ders, DersDenemesi, DersTalebi, HarfNotu, IslemKaydi, KuralAyari,
-    NotGirisi, Ogrenci, OgrenciDers, OnayDurumu, ProgramTuru, TalepDurumu,
+    Belge, BelgeDurumu, BelgeIstegi, BelgeTuru, Ders, DersDenemesi, DersTalebi, HarfNotu, IslemKaydi,
+    KuralAyari, Mesaj, NotGirisi, Ogrenci, OgrenciDers, OnayDurumu, ProgramTuru, TalepDurumu,
 )
 
 KOORD = Rol.KOORDINATOR
@@ -96,9 +97,14 @@ def _ogrenci_detay_sayfasi(request, ogrenci, **formlar):
     """Öğrenci kartı. Koordinatöre işlem formları da gösterilir; hatalı form geri gönderilirse onu kullanır."""
     baglam = _ders_listesi_baglami(ogrenci)
     baglam['belgeler'] = ogrenci.belgeler.select_related('donem')
+    baglam['istekler'] = ogrenci.belge_istekleri.select_related('donem', 'belge', 'isteyen')
+    baglam['mesaj_sayisi'] = ogrenci.mesajlar.count()
     if request.user.rol == KOORD:
+        donemler = services.belge_donemleri(ogrenci)
         baglam['gano_form'] = formlar.get('gano_form') or GanoForm()
         baglam['liste_form'] = formlar.get('liste_form') or ListeyeDersEkleForm()
+        baglam['belge_form'] = formlar.get('belge_form') or KoordinatorBelgeForm(donemler=donemler)
+        baglam['istek_form'] = formlar.get('istek_form') or BelgeIstegiForm(donemler=donemler)
     return render(request, 'takip/ogrenci_detay.html', baglam, status=400 if formlar else 200)
 
 
@@ -591,7 +597,152 @@ def belgelerim(request):
 
     return render(request, 'takip/belgelerim.html', {
         'form': form, 'belgeler': ogrenci.belgeler.select_related('donem'),
+        'istekler': ogrenci.belge_istekleri.select_related('donem', 'belge'), 'yanit_form': IstekYanitForm(),
     })
+
+
+@require_POST
+@rol_gerekli(OGRENCI)
+def istek_yanitla(request, pk):
+    """Öğrenci koordinatörün ek belge isteğine dosya yükler. Başkasının isteği 404 döner."""
+    istek = get_object_or_404(BelgeIstegi, pk=pk, ogrenci__kullanici=request.user)
+    form = IstekYanitForm(request.POST, request.FILES)
+    if not form.is_valid():
+        messages.error(request, _form_hatalari(form))
+        return redirect('belgelerim')
+    try:
+        services.belge_yukle(request.user, istek.tur, form.cleaned_data['dosya'], istek=istek)
+    except services.IslemHatasi as hata:
+        messages.error(request, str(hata))
+    else:
+        messages.success(request, f'{istek.get_tur_display()} yüklendi; koordinatör onayı bekleniyor.')
+    return redirect('belgelerim')
+
+
+# ---------------------------------------------------------------------------
+# Koordinatörün öğrenci kartından belge yüklemesi ve ek belge isteği
+# ---------------------------------------------------------------------------
+
+@require_POST
+@rol_gerekli(KOORD)
+def koordinator_belge_yukle(request, pk):
+    ogrenci = get_object_or_404(Ogrenci, pk=pk)
+    form = KoordinatorBelgeForm(request.POST, request.FILES, donemler=services.belge_donemleri(ogrenci))
+    if form.is_valid():
+        v = form.cleaned_data
+        try:
+            belge = services.belge_yukle(request.user, v['tur'], v['dosya'], v['donem'], v['aciklama'],
+                                         ogrenci=ogrenci)
+        except services.IslemHatasi as hata:
+            form.add_error(None, str(hata))
+        else:
+            messages.success(request, f'{belge.get_tur_display()} öğrencinin kartına eklendi.')
+            return redirect('ogrenci_detay', pk=ogrenci.pk)
+    return _ogrenci_detay_sayfasi(request, ogrenci, belge_form=form)
+
+
+@require_POST
+@rol_gerekli(KOORD)
+def belge_iste(request, pk):
+    ogrenci = get_object_or_404(Ogrenci, pk=pk)
+    form = BelgeIstegiForm(request.POST, donemler=services.belge_donemleri(ogrenci))
+    if form.is_valid():
+        v = form.cleaned_data
+        try:
+            services.belge_iste(request.user, ogrenci, v['tur'], v['aciklama'], v['donem'])
+        except services.IslemHatasi as hata:
+            form.add_error(None, str(hata))
+        else:
+            messages.success(request, 'Ek belge istendi; istek öğrencinin yazışmasına da eklendi.')
+            return redirect('ogrenci_detay', pk=ogrenci.pk)
+    return _ogrenci_detay_sayfasi(request, ogrenci, istek_form=form)
+
+
+# ---------------------------------------------------------------------------
+# Mesajlaşma
+# ---------------------------------------------------------------------------
+
+def _yazisma_baglami(request, ogrenci, form):
+    return {
+        'ogrenci': ogrenci, 'form': form,
+        'mesajlar': ogrenci.mesajlar.select_related('gonderen', 'istek__belge', 'istek__donem'),
+        'yazabilir': request.user.rol in (KOORD, OGRENCI),
+    }
+
+
+def _mesaj_formunu_isle(request, form, **kwargs):
+    """Geçerli formu gönderir. Dönüş: gönderildiyse True; hata forma eklenir."""
+    if not form.is_valid():
+        return False
+    try:
+        services.mesaj_gonder(request.user, form.cleaned_data['metin'], form.cleaned_data['ek'], **kwargs)
+    except services.IslemHatasi as hata:
+        form.add_error(None, str(hata))
+        return False
+    messages.success(request, 'Mesaj gönderildi.')
+    return True
+
+
+@rol_gerekli(KOORD, BASKAN)
+def mesajlar(request):
+    """Öğrencilere göre yazışmalar; okunmamışı olan ve son yazışılan en üstte."""
+    ogrenciler = (
+        Ogrenci.objects.annotate(
+            son_mesaj=Max('mesajlar__olusturulma'), mesaj_sayisi=Count('mesajlar'),
+            okunmamis=Count('mesajlar', filter=Q(mesajlar__okunma_tarihi__isnull=True,
+                                                 mesajlar__gonderen__rol=OGRENCI)),
+        ).order_by('-okunmamis', F('son_mesaj').desc(nulls_last=True), 'ogrenci_no')
+    )
+    return render(request, 'takip/mesajlar.html', {'ogrenciler': ogrenciler})
+
+
+@rol_gerekli(KOORD, BASKAN)
+def yazisma(request, pk):
+    """Koordinatör yazar; bölüm başkanı yalnızca okur (okundu bilgisini de değiştirmez)."""
+    ogrenci = get_object_or_404(Ogrenci, pk=pk)
+    form = MesajForm(request.POST or None, request.FILES or None)
+    if request.method == 'POST':
+        if request.user.rol != KOORD:
+            raise PermissionDenied
+        if _mesaj_formunu_isle(request, form, ogrenci=ogrenci):
+            return redirect('yazisma', pk=ogrenci.pk)
+    elif request.user.rol == KOORD:
+        services.mesajlari_okundu_isaretle(request.user, ogrenci)
+    return render(request, 'takip/yazisma.html', _yazisma_baglami(request, ogrenci, form),
+                  status=400 if form.errors else 200)
+
+
+@rol_gerekli(OGRENCI)
+def benim_mesajlarim(request):
+    try:
+        ogrenci = request.user.ogrenci
+    except Ogrenci.DoesNotExist:
+        raise Http404('Bu hesaba bağlı öğrenci kaydı yok.')
+    form = MesajForm(request.POST or None, request.FILES or None)
+    if request.method == 'POST':
+        if _mesaj_formunu_isle(request, form):
+            return redirect('benim_mesajlarim')
+    else:
+        services.mesajlari_okundu_isaretle(request.user, ogrenci)
+    return render(request, 'takip/yazisma.html', _yazisma_baglami(request, ogrenci, form),
+                  status=400 if form.errors else 200)
+
+
+@rol_gerekli(KOORD, BASKAN, OGRENCI)
+def mesaj_eki(request, pk):
+    """Mesaj ekini yetki kontrolüyle sunar. Öğrenci yalnızca kendi yazışmasındaki eki açabilir."""
+    mesaj = get_object_or_404(Mesaj.objects.select_related('ogrenci'), pk=pk)
+    if request.user.ogrenci_mi and mesaj.ogrenci.kullanici_id != request.user.pk:
+        raise PermissionDenied
+    if not mesaj.ek_yolu:
+        raise Http404('Bu mesajın eki yok.')
+    try:
+        dosya = services.belge_deposu().open(mesaj.ek_yolu, 'rb')
+    except FileNotFoundError:
+        raise Http404('Ek dosyası bulunamadı.')
+    cevap = FileResponse(dosya, content_type=mesaj.ek_mime, filename=mesaj.ek_adi)
+    cevap['Cache-Control'] = 'private, no-store'
+    return cevap
 
 
 @rol_gerekli(KOORD)

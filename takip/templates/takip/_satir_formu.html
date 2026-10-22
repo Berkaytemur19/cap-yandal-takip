@@ -1,5 +1,5 @@
-{# Etiketli, yan yana alanlardan oluşan kısa form. Kullanım: include with form=... action=... dugme=... #}
-<form method="post" action="{{ action }}" class="row g-2 align-items-end" novalidate>
+{# Etiketli, yan yana alanlardan oluşan kısa form. Kullanım: include with form=... action=... dugme=... [cok_parcali=True] #}
+<form method="post" action="{{ action }}" class="row g-2 align-items-end" novalidate{% if cok_parcali %} enctype="multipart/form-data"{% endif %}>
   {% csrf_token %}
   {% for hata in form.non_field_errors %}<div class="col-12 text-danger small">{{ hata }}</div>{% endfor %}
   {% for alan in form %}

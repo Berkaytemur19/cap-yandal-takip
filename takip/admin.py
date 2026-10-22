@@ -45,5 +45,6 @@ class IslemKaydiAdmin(SaltOkunurAdmin):
 
 
 for model in (models.AkademikDonem, models.Protokol, models.ProtokolDersi, models.OgrenciDers,
-              models.AnaDalGanoKaydi, models.KuralAyari, models.DersTalebi, models.Belge, models.NotGirisi):
+              models.AnaDalGanoKaydi, models.KuralAyari, models.DersTalebi, models.Belge, models.NotGirisi,
+              models.BelgeIstegi, models.Mesaj):
     admin.site.register(model, SaltOkunurAdmin)

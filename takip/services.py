@@ -23,9 +23,10 @@ from django.utils import timezone
 from hesaplar.models import Rol
 
 from .models import (
-    DONEMLI_BELGE_TURLERI, AkademikDonem, AnaDalGanoKaydi, Belge, BelgeDurumu, BelgeTuru,
-    DenemeDurumu, Ders, DersDenemesi, DersTalebi, DersTuru, DonemTuru, HarfNotu, IslemKaydi, KayitDurumu,
-    KuralAyari, NotGirisi, Ogrenci, OgrenciDers, OnayDurumu, Protokol, ProtokolDersi, TalepDurumu,
+    DONEMLI_BELGE_TURLERI, OGRENCI_BELGE_TURLERI, AkademikDonem, AnaDalGanoKaydi, Belge, BelgeDurumu,
+    BelgeIstegi, BelgeTuru, DenemeDurumu, Ders, DersDenemesi, DersTalebi, DersTuru, DonemTuru, HarfNotu,
+    IslemKaydi, KayitDurumu, KuralAyari, Mesaj, NotGirisi, Ogrenci, OgrenciDers, OnayDurumu, Protokol,
+    ProtokolDersi, TalepDurumu,
 )
 
 
@@ -551,40 +552,162 @@ def belge_donemleri(ogrenci, tarih=None):
 BELGE_ALANLARI = ['tur', 'donem', 'surum', 'orijinal_ad', 'mime_turu', 'boyut', 'sha256', 'durum']
 
 
+class _SaklananDosya:
+    """Kontrol edilip diske yazılmış dosya. Kayıt oluşturulamazsa geri_al() ile silinir."""
+
+    def __init__(self, dosya, klasor):
+        self.mime = dosya_kontrol(dosya)
+        ozet = hashlib.sha256()
+        for parca in dosya.chunks():
+            ozet.update(parca)
+        dosya.seek(0)
+        self.sha256 = ozet.hexdigest()
+        self.boyut = dosya.size
+        self.ad = Path(dosya.name).name[:200]
+        self.depo = belge_deposu()
+        # Öğrencinin verdiği dosya adı diskte kullanılmaz (yol enjeksiyonu, ad çakışması).
+        self.yol = self.depo.save(f'{klasor}/{uuid.uuid4().hex}{settings.BELGE_IZINLI_TURLER[self.mime]}', dosya)
+
+    def geri_al(self):
+        self.depo.delete(self.yol)
+
+
 @transaction.atomic
-def belge_yukle(kullanici, tur, dosya, donem=None, aciklama=''):
-    """Öğrenci belge yükler. Aynı tür ve dönemde önceki belge varsa yeni sürüm olur; eskisi kalır."""
-    ogrenci = _ogrenci_kaydi(kullanici)
+def belge_yukle(kullanici, tur, dosya, donem=None, aciklama='', *, ogrenci=None, istek=None):
+    """Belge yükler. Aynı tür ve dönemde önceki belge varsa yeni sürüm olur; eskisi kalır.
+
+    - Öğrenci yalnızca kendi kartına yükler (ogrenci parametresi yok sayılır), resmî yazı yükleyemez.
+      `istek` verilirse koordinatörün ek belge isteğine yanıttır: tür ve dönem istekten gelir.
+    - Koordinatör `ogrenci` vererek her türlü belgeyi yükler; kendi yüklediği belge doğrudan onaylıdır.
+    """
+    if kullanici is not None and kullanici.rol == Rol.KOORDINATOR:
+        if ogrenci is None:
+            raise IslemHatasi('Belgenin yükleneceği öğrenci seçilmelidir.')
+        if istek is not None:
+            raise IslemHatasi('Ek belge isteğine yalnızca öğrenci yanıt verir.')
+    else:
+        ogrenci = _ogrenci_kaydi(kullanici)
+        if tur == BelgeTuru.RESMI_YAZI:
+            raise IslemHatasi('Resmî yazıları yalnızca koordinatör yükleyebilir.')
+        if istek is not None:
+            if istek.ogrenci_id != ogrenci.pk:
+                raise PermissionDenied
+            if not istek.acik:
+                raise IslemHatasi('Bu isteğe zaten belge yüklendi.')
+            tur, donem = istek.tur, istek.donem
     if tur not in BelgeTuru.values:
         raise IslemHatasi('Geçersiz belge türü.')
     if tur in DONEMLI_BELGE_TURLERI and donem is None:
         raise IslemHatasi(f'{BelgeTuru(tur).label} için dönem seçilmesi zorunludur.')
-    mime = dosya_kontrol(dosya)
 
     onceki = ogrenci.belgeler.filter(tur=tur, donem=donem).order_by('-surum').first()
     if onceki and onceki.durum == BelgeDurumu.BEKLIYOR:
         raise IslemHatasi('Bu belgenin önceki sürümü hâlâ onay bekliyor. '
                           'Koordinatör yanıtladıktan sonra yeni sürüm yükleyebilirsiniz.')
 
-    ozet = hashlib.sha256()
-    for parca in dosya.chunks():
-        ozet.update(parca)
-    dosya.seek(0)
-
-    depo = belge_deposu()
-    ad = f'belgeler/{ogrenci.ogrenci_no}/{uuid.uuid4().hex}{settings.BELGE_IZINLI_TURLER[mime]}'
-    yol = depo.save(ad, dosya)
+    saklanan = _SaklananDosya(dosya, f'belgeler/{ogrenci.ogrenci_no}')
     try:
+        koordinator = kullanici.rol == Rol.KOORDINATOR
         belge = Belge.objects.create(
             ogrenci=ogrenci, tur=tur, donem=donem, surum=(onceki.surum + 1) if onceki else 1,
-            aciklama=(aciklama or '').strip(), dosya_yolu=yol, orijinal_ad=Path(dosya.name).name[:200],
-            mime_turu=mime, boyut=dosya.size, sha256=ozet.hexdigest(), yukleyen=kullanici,
+            aciklama=(aciklama or '').strip(), dosya_yolu=saklanan.yol, orijinal_ad=saklanan.ad,
+            mime_turu=saklanan.mime, boyut=saklanan.boyut, sha256=saklanan.sha256, yukleyen=kullanici,
+            durum=BelgeDurumu.ONAYLANDI if koordinator else BelgeDurumu.BEKLIYOR,
+            inceleyen=kullanici if koordinator else None,
+            inceleme_tarihi=timezone.now() if koordinator else None,
         )
         islem_kaydet(kullanici, 'belge_yukle', belge, yeni=_deger(belge, BELGE_ALANLARI))
+        if istek is not None:
+            eski = {'belge': str(istek.belge_id) if istek.belge_id else None}
+            istek.belge = belge
+            istek.save()
+            islem_kaydet(kullanici, 'belge_istegi_yanit', istek, eski=eski, yeni={'belge': str(belge.pk)})
     except Exception:
-        depo.delete(yol)  # kayıt oluşmadıysa diskte sahipsiz dosya kalmasın
+        saklanan.geri_al()  # kayıt oluşmadıysa diskte sahipsiz dosya kalmasın
         raise
     return belge
+
+
+# ---------------------------------------------------------------------------
+# Ek belge isteği ve mesajlaşma
+# ---------------------------------------------------------------------------
+
+MESAJ_AZAMI_UZUNLUK = 5000
+
+
+@transaction.atomic
+def belge_iste(kullanici, ogrenci, tur, aciklama, donem=None):
+    """Koordinatör öğrenciden ek belge ister. İstek yazışmaya da mesaj olarak düşer."""
+    _koordinator_olmali(kullanici)
+    _gerekce_olmali(aciklama)
+    if tur not in dict(OGRENCI_BELGE_TURLERI):
+        raise IslemHatasi('Bu belge türü öğrenciden istenemez.')
+    if tur in DONEMLI_BELGE_TURLERI and donem is None:
+        raise IslemHatasi(f'{BelgeTuru(tur).label} için dönem seçilmesi zorunludur.')
+    istek = BelgeIstegi.objects.create(
+        ogrenci=ogrenci, tur=tur, donem=donem, aciklama=aciklama.strip(), isteyen=kullanici,
+    )
+    islem_kaydet(kullanici, 'belge_iste', istek, yeni=_deger(istek, ['tur', 'donem', 'aciklama']))
+    donem_metni = f' ({donem})' if donem else ''
+    _mesaj_olustur(kullanici, ogrenci, f'Ek belge istendi: {BelgeTuru(tur).label}{donem_metni}.\n{istek.aciklama}',
+                   istek=istek)
+    return istek
+
+
+def _mesaj_olustur(kullanici, ogrenci, metin, dosya=None, istek=None):
+    metin = (metin or '').strip()
+    if not metin:
+        raise IslemHatasi('Mesaj boş olamaz.')
+    if len(metin) > MESAJ_AZAMI_UZUNLUK:
+        raise IslemHatasi(f'Mesaj en fazla {MESAJ_AZAMI_UZUNLUK} karakter olabilir.')
+    saklanan = _SaklananDosya(dosya, f'mesajlar/{ogrenci.ogrenci_no}') if dosya else None
+    try:
+        mesaj = Mesaj.objects.create(
+            ogrenci=ogrenci, gonderen=kullanici, metin=metin, istek=istek,
+            **({'ek_yolu': saklanan.yol, 'ek_adi': saklanan.ad, 'ek_mime': saklanan.mime,
+                'ek_boyut': saklanan.boyut, 'ek_sha256': saklanan.sha256} if saklanan else {}),
+        )
+        islem_kaydet(kullanici, 'mesaj_gonder', mesaj,
+                     yeni={'metin': metin[:300], 'ek': saklanan.ad if saklanan else None})
+    except Exception:
+        if saklanan:
+            saklanan.geri_al()
+        raise
+    return mesaj
+
+
+@transaction.atomic
+def mesaj_gonder(kullanici, metin, dosya=None, *, ogrenci=None):
+    """Koordinatör `ogrenci`nin yazışmasına yazar; öğrenci yalnızca kendi yazışmasına yazar."""
+    if kullanici is not None and kullanici.rol == Rol.KOORDINATOR:
+        if ogrenci is None:
+            raise IslemHatasi('Mesajın gönderileceği öğrenci seçilmelidir.')
+    else:
+        ogrenci = _ogrenci_kaydi(kullanici)
+    return _mesaj_olustur(kullanici, ogrenci, metin, dosya)
+
+
+def _okunmamislar(kullanici, ogrenci=None):
+    """Kullanıcının karşı taraftan gelen, okumadığı mesajlar. Bölüm başkanı yazışmanın tarafı değildir."""
+    mesajlar = Mesaj.objects.filter(okunma_tarihi__isnull=True)
+    if kullanici.rol == Rol.KOORDINATOR:
+        mesajlar = mesajlar.filter(gonderen__rol=Rol.OGRENCI)
+    elif kullanici.rol == Rol.OGRENCI:
+        mesajlar = mesajlar.filter(ogrenci__kullanici=kullanici).exclude(gonderen=kullanici)
+    else:
+        return Mesaj.objects.none()
+    return mesajlar.filter(ogrenci=ogrenci) if ogrenci is not None else mesajlar
+
+
+def okunmamis_mesaj_sayisi(kullanici):
+    return _okunmamislar(kullanici).count()
+
+
+def mesajlari_okundu_isaretle(kullanici, ogrenci):
+    """Yazışmayı açan taraf için karşı taraftan gelen mesajlar okundu olur (bildirim kalkar)."""
+    for mesaj in _okunmamislar(kullanici, ogrenci):
+        mesaj.okunma_tarihi = timezone.now()
+        mesaj.save(update_fields=['okunma_tarihi', 'guncellenme'])
 
 
 def _belge_bekliyor_olmali(belge):

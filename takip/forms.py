@@ -2,7 +2,7 @@ from django import forms
 from django.core.validators import RegexValidator
 
 from .models import (
-    DONEMLI_BELGE_TURLERI, AkademikDonem, BelgeTuru, DenemeDurumu, Ders, DersDenemesi, DersTuru, DonemTuru, HarfNotu,
+    DONEMLI_BELGE_TURLERI, OGRENCI_BELGE_TURLERI, AkademikDonem, BelgeTuru, DenemeDurumu, Ders, DersDenemesi, DersTuru, DonemTuru, HarfNotu,
     OgrenciDers, OnayDurumu, ProgramTuru, Protokol,
 )
 
@@ -121,7 +121,7 @@ class TalepForm(BootstrapMixin, forms.Form):
 
 
 class BelgeYukleForm(BootstrapMixin, forms.Form):
-    tur = forms.ChoiceField(label='Belge türü', choices=BelgeTuru.choices)
+    tur = forms.ChoiceField(label='Belge türü', choices=OGRENCI_BELGE_TURLERI)
     donem = forms.ModelChoiceField(
         label='Dönem', queryset=AkademikDonem.objects.none(), required=False,
         empty_label='— Döneme ait değilse boş bırakın —',
@@ -191,3 +191,45 @@ class DenemeDuzeltForm(DenemeForm):
 
 class KuralAyariForm(BootstrapMixin, forms.Form):
     deger = forms.DecimalField(label='Yeni değer', max_digits=8, decimal_places=2)
+
+
+class KoordinatorBelgeForm(BelgeYukleForm):
+    """Koordinatör öğrencinin kartına her türlü belgeyi (resmî yazı dahil) yükler; doğrudan onaylıdır."""
+
+    tur = forms.ChoiceField(label='Belge türü', choices=BelgeTuru.choices)
+
+
+# ---------------------------------------------------------------------------
+# Ek belge isteği ve mesajlaşma
+# ---------------------------------------------------------------------------
+
+DOSYA_GIRDISI = forms.FileInput(attrs={'accept': '.pdf,.jpg,.jpeg,.png'})
+
+
+class BelgeIstegiForm(BootstrapMixin, forms.Form):
+    tur = forms.ChoiceField(label='İstenen belge', choices=OGRENCI_BELGE_TURLERI)
+    donem = forms.ModelChoiceField(
+        label='Dönem', queryset=AkademikDonem.objects.none(), required=False, empty_label='—',
+    )
+    aciklama = forms.CharField(label='Açıklama', max_length=1000,
+                               help_text='Öğrenciye ne istendiğini ve neden istendiğini yazın.')
+
+    def __init__(self, *args, donemler, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['donem'].queryset = donemler
+
+    def clean(self):
+        veri = super().clean()
+        if veri.get('tur') in DONEMLI_BELGE_TURLERI and not veri.get('donem'):
+            self.add_error('donem', 'Bu belge türü için dönem seçilmesi zorunludur.')
+        return veri
+
+
+class IstekYanitForm(BootstrapMixin, forms.Form):
+    dosya = forms.FileField(label='Dosya', widget=DOSYA_GIRDISI, help_text='PDF, JPG veya PNG; en fazla 5 MB.')
+
+
+class MesajForm(BootstrapMixin, forms.Form):
+    metin = forms.CharField(label='Mesaj', max_length=5000, widget=forms.Textarea(attrs={'rows': 3}))
+    ek = forms.FileField(label='Ek dosya (isteğe bağlı)', required=False, widget=DOSYA_GIRDISI,
+                         help_text='PDF, JPG veya PNG; en fazla 5 MB.')

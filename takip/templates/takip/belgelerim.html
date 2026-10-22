@@ -8,6 +8,11 @@
   güncellenmesi gereken belgenin yeni sürümünü yükleyebilirsiniz, eski sürümler saklanır.
 </p>
 
+{% if istekler %}
+<h2 class="h5">Koordinatörün istediği belgeler</h2>
+{% include 'takip/_istek_tablosu.html' %}
+{% endif %}
+
 <div class="row g-4">
   <div class="col-lg-4">
     <form method="post" enctype="multipart/form-data" class="card">

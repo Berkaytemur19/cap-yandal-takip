@@ -13,8 +13,8 @@ from hesaplar.models import Kullanici
 from takip import services
 from takip.management.commands.seed_demo import DEMO_SIFRE
 from takip.models import (
-    Belge, BelgeDurumu, BelgeTuru, DenemeDurumu, DersDenemesi, DersTalebi, IslemKaydi, KuralAyari, NotGirisi,
-    Ogrenci, OnayDurumu, Protokol, ProgramTuru, TalepDurumu,
+    Belge, BelgeDurumu, BelgeIstegi, BelgeTuru, DenemeDurumu, DersDenemesi, DersTalebi, IslemKaydi, KuralAyari,
+    Mesaj, NotGirisi, Ogrenci, OnayDurumu, Protokol, ProgramTuru, TalepDurumu,
 )
 
 
@@ -89,6 +89,13 @@ class SeedDemoTest(TestCase):
         zeynep = Ogrenci.objects.get(ogrenci_no='25330201')
         [deneme] = services.not_girilebilir_denemeler(zeynep)
         self.assertIsNone(services.donem_transkripti(zeynep, deneme.donem))
+
+    def test_yazismalar_ve_belge_istegi(self):
+        self.assertEqual(Mesaj.objects.count(), 5)
+        istek = BelgeIstegi.objects.get()
+        self.assertEqual((istek.ogrenci.ogrenci_no, istek.durum[0]), ('25330102', 'BEKLIYOR'))
+        koord = Kullanici.objects.get(username='koordinator')
+        self.assertEqual(services.okunmamis_mesaj_sayisi(koord), 3)
 
     def test_bekleyen_ders_talebi(self):
         talep = DersTalebi.objects.get()

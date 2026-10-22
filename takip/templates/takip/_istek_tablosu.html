@@ -1,0 +1,34 @@
+{% load takip_etiketleri %}
+{# Ek belge istekleri. yanit_form verilirse (öğrenci) açık isteğin yanında yükleme formu gösterilir. #}
+<div class="table-responsive">
+<table class="table table-sm bg-white small align-middle">
+  <thead><tr><th>İstenen belge</th><th>Açıklama</th><th>İsteme tarihi</th><th>Durum</th><th>Yüklenen</th>{% if yanit_form %}<th></th>{% endif %}</tr></thead>
+  <tbody>
+  {% for i in istekler %}
+    {% with d=i.durum %}
+    <tr>
+      <td>{{ i.get_tur_display }}{% if i.donem %}<div class="text-muted">{{ i.donem }}</div>{% endif %}</td>
+      <td>{{ i.aciklama|linebreaksbr }}</td>
+      <td class="text-nowrap">{{ i.olusturulma|date:"d.m.Y" }}</td>
+      <td><span class="badge bg-{{ d.0|rozet }}">{{ d.1 }}</span>
+        {% if i.belge.red_gerekcesi and d.0 == 'REDDEDILDI' %}<div class="text-danger">Ret: {{ i.belge.red_gerekcesi }}</div>{% endif %}</td>
+      <td>{% if i.belge %}<a href="{% url 'belge_dosyasi' i.belge.pk %}" target="_blank" rel="noopener">{{ i.belge.orijinal_ad }}</a> (s{{ i.belge.surum }}){% else %}—{% endif %}</td>
+      {% if yanit_form %}
+      <td style="min-width: 16rem">
+        {% if i.acik %}
+        <form method="post" action="{% url 'istek_yanitla' i.pk %}" enctype="multipart/form-data" class="input-group input-group-sm">
+          {% csrf_token %}
+          <input type="file" name="dosya" class="form-control" accept=".pdf,.jpg,.jpeg,.png" required aria-label="Dosya">
+          <button class="btn btn-primary">Yükle</button>
+        </form>
+        {% endif %}
+      </td>
+      {% endif %}
+    </tr>
+    {% endwith %}
+  {% empty %}
+    <tr><td colspan="6" class="text-muted">Ek belge isteği yok.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>

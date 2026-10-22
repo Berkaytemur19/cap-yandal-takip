@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% load takip_etiketleri %}
+{% block baslik %}Yazışma · {{ ogrenci.ogrenci_no }}{% endblock %}
+{% block icerik %}
+{% if user.ogrenci_mi %}
+  <h1 class="h3 mb-1">Koordinatörle yazışmam</h1>
+{% else %}
+  <a href="{% url 'mesajlar' %}" class="small">&larr; Tüm yazışmalar</a>
+  <h1 class="h3 mt-2 mb-1">Yazışma: <a href="{% url 'ogrenci_detay' ogrenci.pk %}">{{ ogrenci.ad_soyad }}</a>
+    <small class="text-muted">{{ ogrenci.ogrenci_no }}</small></h1>
+{% endif %}
+<p class="text-muted small">Yazışmalar kalıcı kayıttır: gönderilen mesaj değiştirilemez ve silinemez.
+  {% if user.bolum_baskani_mi %}Salt okunur görünüm.{% endif %}</p>
+
+<div class="d-flex flex-column gap-2 mb-4">
+{% for m in mesajlar %}
+  {% with benim=m.gonderen_id|esit:user.pk ogrenciden=m.gonderen.ogrenci_mi %}
+  <div class="card {% if benim %}ms-md-5 border-primary{% else %}me-md-5{% endif %}{% if m.istek %} border-warning{% endif %}">
+    <div class="card-body py-2">
+      <div class="d-flex justify-content-between small text-muted mb-1">
+        <span><strong class="text-body">{{ m.gonderen.get_full_name|default:m.gonderen.username }}</strong>
+          · {% if ogrenciden %}Öğrenci{% else %}{{ m.gonderen.get_rol_display }}{% endif %}</span>
+        <span class="text-nowrap">{{ m.olusturulma|date:"d.m.Y H:i" }}</span>
+      </div>
+      <div>{{ m.metin|linebreaksbr }}</div>
+      {% if m.ek_yolu %}
+        <div class="small mt-1">📎 <a href="{% url 'mesaj_eki' m.pk %}" target="_blank" rel="noopener">{{ m.ek_adi }}</a>
+          <span class="text-muted">({{ m.ek_boyut|filesizeformat }})</span></div>
+      {% endif %}
+      {% if m.istek %}
+        {% with d=m.istek.durum %}
+        <div class="small mt-1">Ek belge isteği: <span class="badge bg-{{ d.0|rozet }}">{{ d.1 }}</span>
+          {% if user.ogrenci_mi and m.istek.acik %} — <a href="{% url 'belgelerim' %}">Belgelerim'den yükleyin</a>{% endif %}</div>
+        {% endwith %}
+      {% endif %}
+      {% if benim %}
+        <div class="small text-muted text-end">{% if m.okunma_tarihi %}Okundu · {{ m.okunma_tarihi|date:"d.m.Y H:i" }}{% else %}Henüz okunmadı{% endif %}</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endwith %}
+{% empty %}
+  <div class="alert alert-light border">Henüz mesaj yok.</div>
+{% endfor %}
+</div>
+
+{% if yazabilir %}
+<form method="post" enctype="multipart/form-data" class="card" novalidate>
+  {% csrf_token %}
+  <div class="card-body">
+    <h2 class="h6">Yeni mesaj</h2>
+    {% for hata in form.non_field_errors %}<div class="alert alert-danger py-2">{{ hata }}</div>{% endfor %}
+    {% for alan in form %}
+      <div class="mb-2">
+        <label class="form-label small mb-0" for="{{ alan.id_for_label }}">{{ alan.label }}</label>
+        {{ alan }}
+        {% if alan.help_text %}<div class="form-text">{{ alan.help_text }}</div>{% endif %}
+        {% for hata in alan.errors %}<div class="text-danger small">{{ hata }}</div>{% endfor %}
+      </div>
+    {% endfor %}
+    <button class="btn btn-primary">Gönder</button>
+  </div>
+</form>
+{% endif %}
+{% endblock %}

@@ -58,6 +58,7 @@ Zeynep'in listesinde olmayan bir ders için gönderdiği 1 **ders talebi** yanı
 Elif'in yüklediği imzalı kayıt formu (sentetik PDF) **onay bekler** (koordinatör → "Belgeler").
 Burak'ın geçen dönem (2025-2026 Bahar) notu, not belgesiyle birlikte **onay bekler** (koordinatör → "Onay bekleyenler").
 Zeynep'in notu girilecek bir dersi var ama o dönemin not belgesi yok: Zeynep → "Not girişi" önce belgeyi yüklemesini ister.
+Koordinatörün **3 okunmamış mesajı** var (menüde rozet); Burak'tan istenen **ek belge** (muafiyet formu) yüklenmeyi bekliyor.
 
 - `seed_demo` tekrar çalıştırılabilir: var olan kayıtları atlar, hiçbir şeyi çoğaltmaz.
 - Bilinen şifreler kullandığı için yalnızca geliştirme modunda (`DEBUG` açık) çalışır; canlı demo sunucusunda `seed_demo --canli`.
@@ -70,7 +71,7 @@ Zeynep'in notu girilecek bir dersi var ama o dönemin not belgesi yok: Zeynep �
 .\.venv\Scripts\python.exe manage.py test
 ```
 
-134 test; şunları doğrular:
+155 test; şunları doğrular:
 
 - **Servis katmanı:** iş kuralları (onay kilidi, gerekçe zorunluluğu, silme yasağı, kural ayarı sürümleri).
 - **Ekranlar:** her rol kendi sayfalarını açabiliyor; öğrenci ekleme ve katalog işlemleri çalışıyor.
@@ -86,15 +87,19 @@ Zeynep'in notu girilecek bir dersi var ama o dönemin not belgesi yok: Zeynep �
 - **Not girişi:** ÇAP/YDP not belgesi (transkript) yüklenmeden — ya da reddedilmişse — not onaya gönderilemez;
   ana dal transkripti yetmez; onaylanana kadar not hesaba girmez; reddedilen giriş gerekçesiyle kalır; yalnızca
   onaylı “alındı” kaydına ve dönemi gelmiş derse not girilir; öğrenci başkasının kaydına not giremez.
+- **Mesajlaşma ve ek belge isteği:** mesaj değiştirilemez ve silinemez; ek dosya belgelerle aynı kontrolden geçer;
+  öğrenci yalnızca kendi yazışmasını ve ekini görür; bölüm başkanı okur ama yazamaz, okundu bilgisini değiştirmez;
+  okunmamış mesaj rozeti; istek bekliyor → yüklendi → onaylandı / reddedildi olarak izlenir, reddedilince yeni sürüm
+  yüklenir; başka öğrenci isteğe yanıt veremez; resmî yazıyı yalnızca koordinatör yükler.
 - **Demo verisi:** `seed_demo` beklenen veriyi kuruyor ve ikinci çalıştırmada çoğaltmıyor.
 
 ## Roller
 
 | Rol | Yetki |
 |---|---|
-| **Koordinatör** | Öğrenci ekler ve hesabını açar, ders kataloğunu yönetir, ders kayıtlarını ve belgeleri onaylar / gerekçeyle reddeder, ders taleplerini yanıtlar; ana dal GANO'sunu kaynağıyla girer; öğrencinin ders listesine gerekçeyle ders ekler / çıkarır; geriye dönük ders kaydı girer; onaylı kaydı gerekçeyle düzeltir veya iptal eder; kural ayarlarını (sürümlü) günceller |
-| **Bölüm Başkanı** | Kayıtları, kural ayarlarını ve işlem geçmişini görür; hiçbir şeyi değiştiremez |
-| **Öğrenci** | Yalnızca kendi ders listesini ve ilerlemesini görür; listesinden ders seçer, listesinde olmayan ders için talep gönderir; imzalı form ve transkript yükler; dönem sonu notlarını girer (not belgesi yüklendikten sonra); kendi kendine kayıt olamaz |
+| **Koordinatör** | Öğrenci ekler ve hesabını açar, ders kataloğunu yönetir, ders kayıtlarını ve belgeleri onaylar / gerekçeyle reddeder, ders taleplerini yanıtlar; öğrenciyle yazışır, ek belge ister, resmî yazı dahil belge yükler; ana dal GANO'sunu kaynağıyla girer; öğrencinin ders listesine gerekçeyle ders ekler / çıkarır; geriye dönük ders kaydı girer; onaylı kaydı gerekçeyle düzeltir veya iptal eder; kural ayarlarını (sürümlü) günceller |
+| **Bölüm Başkanı** | Kayıtları, yazışmaları, kural ayarlarını ve işlem geçmişini görür; hiçbir şeyi değiştiremez |
+| **Öğrenci** | Yalnızca kendi ders listesini ve ilerlemesini görür; listesinden ders seçer, listesinde olmayan ders için talep gönderir; imzalı form ve transkript yükler; dönem sonu notlarını girer (not belgesi yüklendikten sonra); koordinatörle yazışır, istenen ek belgeleri yükler; kendi kendine kayıt olamaz |
 
 Yetki her sayfada **sunucu tarafında** kontrol edilir (`hesaplar/yetki.py` → `rol_gerekli`); servis
 katmanı da aynı kontrolü ayrıca yapar.
@@ -132,11 +137,11 @@ templates/              Ortak şablonlar (base.html, giriş, 403)
 İlk sürüm (Ekim 2026): giriş ve roller, öğrenci ekleme, ders kataloğu, öğrenci ders listesi ve AKTS
 özeti, işlem geçmişi, demo verisi. Sonra eklenenler: onay / ret ekranı, öğrencinin ders seçimi ve ders talepleri, belge yükleme ve inceleme,
 koordinatörün öğrenci kartı işlemleri (GANO, ders listesi, geriye dönük kayıt, düzeltme / iptal), kural ayarları ekranı,
-öğrencinin dönem sonu not girişi (ÇAP/YDP not belgesi şartıyla) ve koordinatörün not onayı.
+öğrencinin dönem sonu not girişi (ÇAP/YDP not belgesi şartıyla) ve koordinatörün not onayı,
+koordinatör ↔ öğrenci mesajlaşma (ekli dosya, okunmamış rozeti), ek belge isteği ve koordinatörün belge yüklemesi.
 
 Henüz yapılmayanlar:
 
-- Koordinatör ↔ öğrenci mesajlaşma
 - Kural ayarlarına göre uyarı üretme (GANO, ders almama, süre)
 
 ## Canlıya alma (PythonAnywhere)

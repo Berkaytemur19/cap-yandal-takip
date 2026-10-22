@@ -184,6 +184,26 @@ NOT_SENARYOLARI = [
 ]
 
 
+# Yazışmalar: (gönderen, metin) veya ('istek', belge türü, açıklama). Öğrencinin hiç mesajı yoksa eklenir.
+YAZISMALAR = {
+    # Koordinatörde okunmamış mesaj rozeti görünür.
+    '24330101': [
+        ('ogrenci', 'Merhaba hocam, imzalı kayıt formumu Belgelerim sayfasından yükledim. '
+                    'Kontrol edebilir misiniz?'),
+    ],
+    # Açık ek belge isteği: öğrenci Belgelerim'de yükleme formunu görür.
+    '25330102': [
+        ('istek', BelgeTuru.DIGER, '3301553 dersindeki muafiyetiniz için ana dal danışmanınıza imzalatılmış '
+                                   '"Özel Şartlı Derslerin Muafiyeti" formunu yükleyin (sentetik demo).'),
+        ('ogrenci', 'Hocam formu danışmanıma imzalatıp bu hafta yükleyeceğim.'),
+    ],
+    '25330201': [
+        ('ogrenci', 'Hocam Veri Bilimi dersi için talep gönderdim, uygun görürseniz listeme ekleyebilir misiniz?'),
+        ('koordinator', 'Talebinizi aldım, yandal planınızla birlikte değerlendirip yanıtlayacağım.'),
+    ],
+}
+
+
 class Command(BaseCommand):
     help = 'Demo verisini (sentetik) servis katmanı üzerinden yükler. Tekrar çalıştırılabilir.'
 
@@ -214,6 +234,8 @@ class Command(BaseCommand):
                 self._ogrenci(koord, protokoller, veri)
             for veri in NOT_SENARYOLARI:
                 self._not_senaryosu(koord, veri)
+            for ogrenci_no, adimlar in YAZISMALAR.items():
+                self._yazisma(koord, ogrenci_no, adimlar)
 
         self.stdout.write(self.style.SUCCESS(
             f"Demo verisi hazır: {self.sayac['eklendi']} kayıt eklendi, {self.sayac['atlandi']} zaten vardı."
@@ -328,3 +350,17 @@ class Command(BaseCommand):
             services.belge_yukle(ogrenci.kullanici, BelgeTuru.TRANSKRIPT,
                                  SimpleUploadedFile('not_belgesi.pdf', icerik), donem)
             services.not_gir(ogrenci.kullanici, [(deneme, veri['harf_notu'], veri['durum'])])
+
+    def _yazisma(self, koord, ogrenci_no, adimlar):
+        ogrenci = Ogrenci.objects.get(ogrenci_no=ogrenci_no)
+        if ogrenci.mesajlar.exists():
+            self._eklendi(False)
+            return
+        self._eklendi(True)
+        for adim in adimlar:
+            if adim[0] == 'istek':
+                services.belge_iste(koord, ogrenci, adim[1], adim[2])
+            elif adim[0] == 'ogrenci':
+                services.mesaj_gonder(ogrenci.kullanici, adim[1])
+            else:
+                services.mesaj_gonder(koord, adim[1], ogrenci=ogrenci)

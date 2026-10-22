@@ -21,6 +21,12 @@
   </div></div></div>
 </div>
 
+{% if okunmamis_mesaj %}
+<div class="alert alert-warning">
+  Öğrencilerden <strong>{{ okunmamis_mesaj }}</strong> okunmamış mesaj var. <a href="{% url 'mesajlar' %}">Mesajları aç</a>
+</div>
+{% endif %}
+
 {% if user.koordinator_mu and sayilar.talep %}
 <div class="alert alert-info">
   Yanıt bekleyen <strong>{{ sayilar.talep }}</strong> ders talebi var. <a href="{% url 'talepler' %}">Talepleri incele</a>
