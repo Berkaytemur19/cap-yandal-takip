@@ -1,21 +1,45 @@
 """
 ÇAP / Yandal Takip Sistemi — Django ayarları.
 
-Geliştirme ortamı içindir. Gizli anahtar ortam değişkeninden okunur;
-tanımlı değilse yalnızca yerel geliştirme için bir varsayılan kullanılır.
+Ayarlar ortam değişkenlerinden okunur; proje kökünde bir `.env` dosyası varsa
+önce o yüklenir (örnek: `.env.ornek`). `.env` yoksa yerel geliştirme varsayılanları
+kullanılır. Canlı sunucuda DJANGO_DEBUG=0 ve gerçek bir DJANGO_SECRET_KEY zorunludur.
 """
 
 import os
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
 
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY',
-    'django-insecure-sadece-yerel-gelistirme-icin-degistirin',
-)
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / '.env')
+
+YEREL_ANAHTAR = 'django-insecure-sadece-yerel-gelistirme-icin-degistirin'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', YEREL_ANAHTAR)
 DEBUG = os.environ.get('DJANGO_DEBUG', '1') == '1'
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+if not DEBUG and SECRET_KEY == YEREL_ANAHTAR:
+    raise ImproperlyConfigured('DEBUG kapalıyken DJANGO_SECRET_KEY tanımlanmalı.')
+
+# Virgülle ayrılmış alan adları, örn: kullaniciadi.pythonanywhere.com
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost'] + [
+    h.strip() for h in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if h.strip()
+]
+CSRF_TRUSTED_ORIGINS = [f'https://{h}' for h in ALLOWED_HOSTS if h not in ('127.0.0.1', 'localhost')]
+
+# Canlı sunucu (PythonAnywhere) bir vekil sunucunun (proxy) arkasında çalışır:
+# HTTPS bilgisi ve gerçek istemci IP'si başlıklarla gelir.
+PROXY_ARKASINDA = os.environ.get('DJANGO_PROXY_ARKASINDA', '0') == '1'
+if PROXY_ARKASINDA:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+if not DEBUG:
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_SSL_REDIRECT = PROXY_ARKASINDA  # http:// istekleri https://'e yönlendirilir
+    SECURE_HSTS_SECONDS = 3600
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = 'same-origin'
 
 
 INSTALLED_APPS = [
@@ -95,6 +119,8 @@ AXES_COOLOFF_TIME = 0.5  # saat
 AXES_LOCKOUT_PARAMETERS = [['username', 'ip_address']]
 AXES_RESET_ON_SUCCESS = True
 AXES_LOCKOUT_TEMPLATE = 'hesaplar/kilitli.html'
+# Proxy arkasında REMOTE_ADDR herkes için aynı olur; gerçek IP X-Real-IP başlığındadır.
+AXES_CLIENT_IP_CALLABLE = 'hesaplar.yetki.istemci_ip'
 
 
 # --- Dil ve saat ---
@@ -106,6 +132,8 @@ USE_TZ = True
 
 # --- Statik dosyalar ---
 STATIC_URL = 'static/'
+# `manage.py collectstatic` dosyaları buraya toplar; canlı sunucu /static/ adresini bu klasöre bağlar.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Yüklenen belgeler web kökü dışında tutulur.
 # MEDIA_URL bilerek tanımlanmıyor: dosyalar yalnızca yetki kontrollü view (belge_dosyasi) ile sunulur.

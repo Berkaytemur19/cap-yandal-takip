@@ -108,3 +108,11 @@ class SeedDemoGuvenlikTest(TestCase):
         with self.assertRaises(CommandError):
             _seed()
         self.assertFalse(Kullanici.objects.filter(username='koordinator').exists())
+
+    @override_settings(DEBUG=False)
+    def test_canli_bayragiyla_debug_kapaliyken_calisir(self):
+        depo = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, depo, ignore_errors=True)
+        with override_settings(KORUMALI_DOSYA_KOKU=depo):
+            call_command('seed_demo', '--canli', stdout=StringIO())
+        self.assertTrue(Kullanici.objects.get(username='koordinator').check_password(DEMO_SIFRE))

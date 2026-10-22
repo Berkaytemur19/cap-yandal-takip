@@ -58,7 +58,7 @@ Zeynep'in listesinde olmayan bir ders için gönderdiği 1 **ders talebi** yanı
 Elif'in yüklediği imzalı kayıt formu (sentetik PDF) **onay bekler** (koordinatör → "Belgeler").
 
 - `seed_demo` tekrar çalıştırılabilir: var olan kayıtları atlar, hiçbir şeyi çoğaltmaz.
-- Bilinen şifreler kullandığı için yalnızca geliştirme modunda (`DEBUG` açık) çalışır.
+- Bilinen şifreler kullandığı için yalnızca geliştirme modunda (`DEBUG` açık) çalışır; canlı demo sunucusunda `seed_demo --canli`.
 - Kendi yönetici hesabınızı açmak için: `.\.venv\Scripts\python.exe manage.py createsuperuser`
   (rol sorusuna `KOORDINATOR`, `BOLUM_BASKANI` veya `OGRENCI` yazın).
 
@@ -68,7 +68,7 @@ Elif'in yüklediği imzalı kayıt formu (sentetik PDF) **onay bekler** (koordin
 .\.venv\Scripts\python.exe manage.py test
 ```
 
-91 test; şunları doğrular:
+94 test; şunları doğrular:
 
 - **Servis katmanı:** iş kuralları (onay kilidi, gerekçe zorunluluğu, silme yasağı, kural ayarı sürümleri).
 - **Ekranlar:** her rol kendi sayfalarını açabiliyor; öğrenci ekleme ve katalog işlemleri çalışıyor.
@@ -129,6 +129,54 @@ Henüz yapılmayanlar:
 - Öğrencinin dönem sonu notlarını girmesi (transkript yüklenmeden onaya gönderilemeyecek)
 - Koordinatör ↔ öğrenci mesajlaşma
 - Kural ayarlarına göre uyarı üretme (GANO, ders almama, süre)
+
+## Canlıya alma (PythonAnywhere)
+
+Uygulama PythonAnywhere'in ücretsiz hesabında çalışır. SQLite veritabanı ve yüklenen belgeler kalıcı diskte durur.
+Aşağıda `KULLANICI` yerine PythonAnywhere kullanıcı adınızı yazın.
+
+1. **Bash konsolu** (Consoles → Bash):
+   ```bash
+   git clone https://github.com/Berkaytemur19/cap-yandal-takip.git
+   cd cap-yandal-takip
+   python3.13 -m venv .venv
+   .venv/bin/pip install -r requirements.txt
+   cp .env.ornek .env
+   .venv/bin/python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+   nano .env    # üretilen anahtarı ve KULLANICI.pythonanywhere.com adresini yazın
+   .venv/bin/python manage.py migrate
+   .venv/bin/python manage.py collectstatic --noinput
+   .venv/bin/python manage.py seed_demo --canli
+   ```
+2. **Web** sekmesi → *Add a new web app* → *Manual configuration* → Python 3.13.
+3. Aynı sayfada:
+   - *Virtualenv*: `/home/KULLANICI/cap-yandal-takip/.venv`
+   - *Static files*: URL `/static/` → Directory `/home/KULLANICI/cap-yandal-takip/staticfiles`
+   - *Force HTTPS*: açık
+4. *WSGI configuration file* bağlantısını açın, içeriğini silip şunu yazın:
+   ```python
+   import os, sys
+   yol = '/home/KULLANICI/cap-yandal-takip'
+   if yol not in sys.path:
+       sys.path.insert(0, yol)
+   os.environ['DJANGO_SETTINGS_MODULE'] = 'config.settings'
+   from django.core.wsgi import get_wsgi_application
+   application = get_wsgi_application()
+   ```
+5. Yeşil **Reload** düğmesine basın ve `https://KULLANICI.pythonanywhere.com/giris/` adresini açın.
+
+**Güncelleme** (yeni kodu yayına almak): Bash konsolunda
+```bash
+cd ~/cap-yandal-takip && git pull
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python manage.py migrate
+.venv/bin/python manage.py collectstatic --noinput
+```
+ardından Web sekmesinde **Reload**.
+
+- Ayarlar `.env` dosyasından okunur (`.env.ornek`'e bakın). `DJANGO_DEBUG=0` iken gizli anahtar tanımlanmamışsa uygulama açılmaz.
+- `seed_demo --canli` yalnızca sentetik verili demo sunucusu içindir: herkesin bildiği `Demo.2026` şifresini kullanır.
+- Ücretsiz hesapta web uygulaması 3 ayda bir Web sekmesinden uzatılmalıdır.
 
 ## Sorun giderme
 

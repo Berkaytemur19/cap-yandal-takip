@@ -142,6 +142,10 @@ Hoca (20 Ekim): öğrencinin ders seçeceği sayfa ve form yükleyeceği sayfa o
 - [x] Onay bekleyenler ekranı (onayla / gerekçeli reddet) — commit `528bb3a` (kullanıcı elle bakmayı sona bıraktı)
 - [x] Ders seçimi + ders talepleri: `services.ders_sec` / `talep_gonder` / `talep_kabul` / `talep_reddet`, `DersTalebi` modeli (migration 0002), `/benim/ders-sec/` (öğrenci), `/talepler/` (koordinatör), seed'de Zeynep için 1 bekleyen talep, `test_ders_secimi.py` (71 test geçti)
 - [x] Belge yükleme: `Belge` modeli (migration 0003), `services.belge_yukle` / `belge_onayla` / `belge_reddet` / `dosya_kontrol`, `/benim/belgeler/` (öğrenci), `/belgeler/` (koordinatör), `/belgeler/<pk>/dosya/` (yetkili indirme), öğrenci detayında belge tablosu, seed'de Elif için bekleyen sentetik PDF, `test_belgeler.py` (91 test geçti; sahiplik kontrolü bozulunca testin yakaladığı doğrulandı)
+- [x] **22 Ekim — hocanın yeni maili:** ara sınav notu **canlı uygulama** üzerinden verilecek. 30 Ekim 23.59'a kadar ilkerozkan@selcuk.edu.tr adresine, konu "ÇAP Takip Otomasyonu Arasına - Ad soyad" ile canlı link + 3 rolün test hesapları + GitHub linki + geliştirme durumu gönderilecek. Bu yüzden deploy öne alındı. Platform: **PythonAnywhere** (kullanıcı onayladı).
+- [x] Deploy hazırlığı: `.env` (python-dotenv, örnek `.env.ornek`), DEBUG kapalıyken gizli anahtar zorunlu + güvenli çerezler + HTTPS yönlendirme, `STATIC_ROOT=staticfiles`, axes için `hesaplar.yetki.istemci_ip` (proxy arkasında X-Real-IP), `seed_demo --canli`, README'de PythonAnywhere adımları (94 test geçti)
+- [ ] PythonAnywhere'de kurulum (kullanıcı hesabı açacak)
+- [ ] Eksik analizi (22 Ekim) — sırayla: koordinatör ekranları (GANO girişi, listeye ders ekle/çıkar, geriye dönük deneme, düzelt/iptal, kural ayarları — servisleri hazır, ekranı yok), mezuniyet/sertifika/kayıt silme kararı, koordinatör özel notu, ek belge isteme, koordinatörün belge yüklemesi, şifre değiştirme, sızma testi/güvenlik açıklaması
 - [ ] Öğrencinin not girişi (transkript şartıyla) — tasarım kararlarındaki madde
 - [ ] Kural uyarıları, mesajlaşma (zaman kalırsa)
 - [ ] Deploy (en son)

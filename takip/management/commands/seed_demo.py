@@ -6,7 +6,8 @@ Kullanım:
 
 - Tüm veri takip.services üzerinden girilir; her adım İşlem Kaydı'na düşer.
 - Tekrar çalıştırılabilir: var olan ders / protokol / ayar / hesap / öğrenci atlanır.
-- Bilinen demo şifreleri kullandığı için yalnızca DEBUG açıkken çalışır.
+- Bilinen demo şifreleri kullandığı için yalnızca DEBUG açıkken çalışır. Değerlendirme için
+  açılan canlı demo sunucusunda bilerek çalıştırmak gerekirse: `seed_demo --canli`.
 - Tüm kişiler ve notlar sentetiktir.
 """
 
@@ -174,9 +175,18 @@ OGRENCILER = [
 class Command(BaseCommand):
     help = 'Demo verisini (sentetik) servis katmanı üzerinden yükler. Tekrar çalıştırılabilir.'
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--canli', action='store_true',
+            help='DEBUG kapalıyken de çalıştır (yalnızca sentetik verili demo sunucusu için).',
+        )
+
     def handle(self, *args, **options):
-        if not settings.DEBUG:
-            raise CommandError('seed_demo bilinen demo şifreleri kullanır; yalnızca DEBUG açıkken çalışır.')
+        if not settings.DEBUG and not options['canli']:
+            raise CommandError(
+                'seed_demo bilinen demo şifreleri kullanır; yalnızca DEBUG açıkken çalışır. '
+                'Sentetik verili demo sunucusunda bilerek çalıştırmak için: seed_demo --canli'
+            )
         # Windows'ta çıktı dosyaya/boruya yönlendirilince cp1252 Türkçe harfleri yazamaz.
         if hasattr(sys.stdout, 'reconfigure') and (sys.stdout.encoding or '').lower() != 'utf-8':
             sys.stdout.reconfigure(encoding='utf-8')

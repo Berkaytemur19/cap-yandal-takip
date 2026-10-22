@@ -6,3 +6,4 @@ korumali_dosyalar/
 .env
 .vscode/
 .idea/
+staticfiles/
